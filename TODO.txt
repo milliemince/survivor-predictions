@@ -1,0 +1,371 @@
+Stack:
+
+- Supabase
+- Next.js
+- Tailwind CSS
+
+This assumes App Router (modern Next.js).
+
+---
+
+# 🗄 SUPABASE TASKS
+
+## 1️⃣ Project Setup
+
+- [x]  Create new Supabase project
+- [x]  Save:
+    - Project URL
+    - anon public key
+    - service role key (keep secret)
+- [x]  Enable email/password auth
+- [x]  Disable email confirmation (optional for MVP)
+- [x]  Set site URL for auth redirects
+
+---
+
+## 2️⃣ Database Schema Creation
+
+### Profiles Table
+
+- [x]  Create `profiles` table:
+    - id (uuid, PK, references auth.users)
+    - username (text, unique)
+    - is_admin (boolean, default false)
+    - created_at (timestamp default now())
+- [x]  Create trigger to auto-create profile on signup
+
+---
+
+### Episodes Table
+
+- [x]  Create `episodes`
+    - id (serial PK)
+    - episode_number (int)
+    - air_date (date)
+    - created_at (timestamp)
+
+---
+
+### Questions Table
+
+- [x]  Create `questions`
+    - id (serial PK)
+    - episode_id (fk → episodes)
+    - question_text (text)
+    - point_value (int)
+    - correct_answer (text, nullable)
+    - lock_time (timestamp) ← prevents late predictions
+    - created_at
+
+---
+
+### Predictions Table
+
+- [x]  Create `predictions`
+    - id (serial PK)
+    - user_id (uuid → profiles.id)
+    - question_id (fk → questions.id)
+    - predicted_answer (text)
+    - points_awarded (int default 0)
+    - created_at
+- [x]  Add unique constraint:
+    - (user_id, question_id)
+
+---
+
+## 3️⃣ Row-Level Security (Critical)
+
+Enable RLS on:
+
+- [x]  profiles
+- [x]  episodes
+- [x]  questions
+- [x]  predictions
+
+### Policies
+
+### Profiles
+
+- [x]  Users can select their own profile
+- [x]  Users can update their own username
+
+### Episodes
+
+- [x]  Everyone can read
+- [x]  Only admins can insert/update/delete
+
+### Questions
+
+- [x]  Everyone can read
+- [x]  Only admins can insert/update/delete
+
+### Predictions
+
+- [x]  Users can insert their own predictions
+- [x]  Users can update their own predictions
+- [x]  Users can read their own predictions
+- [x]  Admin can read all
+
+---
+
+## 4️⃣ Leaderboard View
+
+- [x]  Create SQL view:
+    - Sum points_awarded
+    - Join profiles
+    - Order by total DESC
+- [x]  Test query in SQL editor
+- [x]  Confirm API access works
+
+---
+
+## 5️⃣ Scoring Logic
+
+Option A (manual admin scoring):
+
+- [ ]  Admin sets `correct_answer`
+- [ ]  Run SQL update:
+    - Compare predicted_answer
+    - Set points_awarded
+
+Option B (recommended long-term):
+
+- [ ]  Create SQL function to:
+    - Score all predictions for question
+- [ ]  Add button in admin UI to trigger scoring
+
+---
+
+## 6️⃣ Admin Utilities
+
+- [ ]  Make yourself admin in profiles table
+- [ ]  Create SQL seed script for:
+    - Episodes
+    - Sample questions
+    - Test users
+
+---
+
+# ⚛️ NEXT.JS TASKS
+
+Using Next.js
+
+---
+
+## 1️⃣ Project Setup
+
+- [x]  `npx create-next-app`
+- [x]  Enable App Router
+- [x]  Install Supabase client
+- [x]  Install Tailwind (if not included)
+- [x]  Create `.env.local`
+    - NEXT_PUBLIC_SUPABASE_URL
+    - NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+---
+
+## 2️⃣ Supabase Client Setup
+
+- [x]  Create `/lib/supabaseClient.ts`
+- [x]  Create browser client
+- [x]  Create server client (for protected routes)
+
+---
+
+## 3️⃣ Authentication Pages
+
+- [x]  `/login`
+- [x]  `/signup`
+- [x]  Use supabase.auth.signInWithPassword()
+- [x]  Use supabase.auth.signUp()
+- [x]  Redirect after login
+- [x]  Handle errors
+- [x]  Logout button
+
+---
+
+## 4️⃣ Route Protection
+
+- [x]  Create middleware.ts
+- [x]  Protect:
+    - /dashboard
+    - /predictions
+    - /admin
+- [x]  Redirect unauthenticated users
+
+---
+
+## 5️⃣ Core Pages
+
+---
+
+### Dashboard
+
+- [ ]  Fetch user profile
+- [ ]  Fetch total points
+- [ ]  Show current ranking
+- [ ]  Show latest episode
+- [ ]  Show countdown to lock time
+
+---
+
+### Predictions Page
+
+- [ ]  Fetch questions for current episode
+- [ ]  Render dynamic form
+- [ ]  Pre-fill existing predictions
+- [ ]  Disable if lock_time passed
+- [ ]  Save predictions
+- [ ]  Show success toast
+
+---
+
+### Leaderboard Page
+
+- [ ]  Fetch leaderboard view
+- [ ]  Render sortable table
+- [ ]  Highlight current user
+- [ ]  Show rank position
+- [ ]  Add weekly filter (optional)
+
+---
+
+### Admin Panel
+
+- [ ]  Restrict to is_admin
+- [ ]  Create episode
+- [ ]  Create questions
+- [ ]  Set correct answers
+- [ ]  Trigger scoring
+- [ ]  Lock episode manually (optional)
+
+---
+
+## 6️⃣ Data Fetching Strategy
+
+- [ ]  Use Server Components for leaderboard
+- [ ]  Use Client Components for forms
+- [ ]  Add loading states
+- [ ]  Add error boundaries
+
+---
+
+## 7️⃣ Quality of Life
+
+- [ ]  Toast notifications
+- [ ]  Form validation
+- [ ]  Empty states
+- [ ]  Skeleton loaders
+- [ ]  Optimistic UI updates
+
+---
+
+# 🎨 TAILWIND / UI TASKS
+
+Using Tailwind CSS
+
+---
+
+## 1️⃣ Base Setup
+
+- [ ]  Configure tailwind.config.js
+- [ ]  Add custom color theme
+    - Tribal orange
+    - Ocean blue
+    - Dark charcoal
+- [ ]  Set container max-width
+- [ ]  Enable dark mode
+
+---
+
+## 2️⃣ Layout System
+
+- [ ]  Create App Layout:
+    - Sidebar (desktop)
+    - Bottom nav (mobile)
+- [ ]  Header with:
+    - User dropdown
+    - Logout
+- [ ]  Responsive breakpoints
+
+---
+
+## 3️⃣ Core Components
+
+- [ ]  Button variants
+    - Primary
+    - Secondary
+    - Danger
+- [ ]  Input field style
+- [ ]  Form label style
+- [ ]  Card component
+- [ ]  Table component
+- [ ]  Modal component
+
+---
+
+## 4️⃣ Leaderboard Design
+
+- [ ]  Large ranking numbers
+- [ ]  Highlight top 3
+- [ ]  Highlight current user
+- [ ]  Animated rank changes (optional)
+- [ ]  Responsive stacked layout for mobile
+
+---
+
+## 5️⃣ Predictions UX
+
+- [ ]  Question cards
+- [ ]  Clear point value badge
+- [ ]  Disabled styling after lock
+- [ ]  Confirmation modal before submit
+- [ ]  Save progress indicator
+
+---
+
+## 6️⃣ Polish
+
+- [ ]  Smooth hover transitions
+- [ ]  Subtle shadows
+- [ ]  Consistent spacing scale
+- [ ]  Rounded-xl card system
+- [ ]  Clean typography scale
+
+---
+
+# 🚀 DEPLOYMENT TASKS
+
+---
+
+## Vercel Deployment
+
+- [ ]  Push to GitHub
+- [ ]  Connect repo to Vercel
+- [ ]  Add environment variables
+- [ ]  Set production URL in Supabase auth
+- [ ]  Test auth redirects in prod
+
+---
+
+## Post-Deploy Checks
+
+- [ ]  Test signup
+- [ ]  Test login
+- [ ]  Test prediction save
+- [ ]  Test leaderboard
+- [ ]  Test admin scoring
+- [ ]  Test RLS (very important)
+- [ ]  Mobile test
+
+---
+
+# 🔥 Stretch Features (Optional but Awesome)
+
+- [ ]  Weekly winner badge
+- [ ]  Streak tracking
+- [ ]  Charts for performance over time
+- [ ]  Survivor-themed branding
+- [ ]  Email reminder before lock
+
+---
