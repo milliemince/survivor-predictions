@@ -51,7 +51,7 @@ export default function PlayerSelector({
   disabled?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-6 gap-x-2 gap-y-4">
+    <div className="grid grid-cols-4 gap-x-3 gap-y-10">
       {SEASON_50_PLAYERS.map((player) => {
         const isSelected = selected === player.id;
         return (
@@ -64,7 +64,7 @@ export default function PlayerSelector({
           >
             {/* Circle */}
             <div
-              className={`relative w-14 h-14 rounded-full overflow-hidden transition-all duration-150 ${
+              className={`relative w-full aspect-square rounded-full overflow-hidden transition-all duration-150 ${
                 isSelected
                   ? "ring-[3px] ring-orange-500 ring-offset-2 scale-105"
                   : "ring-2 ring-transparent group-hover:ring-zinc-300"
@@ -92,8 +92,8 @@ export default function PlayerSelector({
 
             {/* Name */}
             <span
-              className={`text-[11px] leading-tight text-center line-clamp-2 w-full transition-colors ${
-                isSelected ? "font-semibold text-orange-700" : "text-zinc-500 group-hover:text-zinc-700"
+              className={`text-sm font-bold leading-tight text-center line-clamp-2 w-full transition-colors ${
+                isSelected ? "text-orange-700" : "text-zinc-600 group-hover:text-zinc-800"
               }`}
             >
               {player.name}
