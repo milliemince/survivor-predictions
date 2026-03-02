@@ -26,5 +26,11 @@ export default async function AdminPage() {
       .order("id", { ascending: false }),
   ]);
 
-  return <AdminPanel episodes={episodes ?? []} questions={questions ?? []} />;
+  // Supabase returns the `episodes` join as an array; normalize to single object for AdminPanel
+  const normalizedQuestions = questions?.map((q) => ({
+    ...q,
+    episodes: Array.isArray(q.episodes) ? (q.episodes[0] ?? null) : q.episodes,
+  })) ?? [];
+
+  return <AdminPanel episodes={episodes ?? []} questions={normalizedQuestions} />;
 }

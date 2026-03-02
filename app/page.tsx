@@ -2,27 +2,28 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6">
-      <h1 className="text-4xl font-bold tracking-tight">Survivor Predictions</h1>
-      <p className="text-zinc-500">Predict who gets voted out. Compete with friends.</p>
-      <div className="flex gap-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 px-4 text-center">
+      <div>
+        <p className="font-display text-survivor-green text-sm uppercase tracking-[0.3em] mb-3">Season 50</p>
+        <h1 className="font-display text-5xl md:text-7xl font-bold uppercase tracking-wide text-parchment leading-none">
+          Survivor<br/>Predictions
+        </h1>
+        <p className="mt-4 text-parchment/60 max-w-sm mx-auto">
+          Outwit. Outplay. Outpredict. Compete with friends to call every elimination.
+        </p>
+      </div>
+      <div className="flex gap-3">
         <Link
           href="/signup"
-          className="rounded-full bg-black px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+          className="rounded-full bg-survivor-green px-8 py-3 text-sm font-semibold text-white hover:bg-survivor-green-dark transition-colors"
         >
-          Sign Up
+          Play Now
         </Link>
         <Link
           href="/login"
-          className="rounded-full border border-black/10 px-6 py-2 text-sm font-medium hover:bg-black/5"
+          className="rounded-full border border-parchment/20 px-8 py-3 text-sm font-medium text-parchment hover:bg-white/5 transition-colors"
         >
           Log In
-        </Link>
-        <Link
-          href="/leaderboard"
-          className="rounded-full border border-black/10 px-6 py-2 text-sm font-medium hover:bg-black/5"
-        >
-          Leaderboard
         </Link>
       </div>
     </div>

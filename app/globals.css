@@ -1,26 +1,30 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-oswald);
+
+  /* Survivor brand tokens */
+  --color-survivor-green: #00AB50;
+  --color-survivor-green-dark: #007A3A;
+  --color-ocean-blue: #358BBD;
+  --color-ocean-blue-dark: #2570A0;
+  --color-tribal-red: #DC2626;
+  --color-earth: #141210;
+  --color-earth-surface: #1F1C14;
+  --color-parchment: #F5F0E4;
+  --color-parchment-dark: #EAE4D4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #141210;
+  --foreground: #F5F0E4;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

@@ -29,43 +29,43 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white p-8 shadow-sm">
-        <h1 className="mb-6 text-2xl font-semibold">Create account</h1>
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-earth-surface p-8 shadow-2xl">
+        <h1 className="mb-6 font-display text-2xl uppercase tracking-wide text-parchment">Create Account</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-zinc-700">Email</label>
+            <label className="text-sm font-medium text-parchment/60">Email</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-zinc-700">Password</label>
+            <label className="text-sm font-medium text-parchment/60">Password</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
               minLength={6}
-              className="rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
             />
           </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-tribal-red">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 rounded-full bg-black py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+            className="mt-2 rounded-full bg-survivor-green py-2 text-sm font-medium text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
           >
             {loading ? "Creating account..." : "Sign Up"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-zinc-500">
+        <p className="mt-4 text-center text-sm text-parchment/40">
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-black underline">
+          <Link href="/login" className="font-medium text-survivor-green hover:underline">
             Log in
           </Link>
         </p>

@@ -153,16 +153,18 @@ export default function PredictionsForm({
             return (
               <div
                 key={question.id}
-                className={`rounded-xl border bg-white transition-opacity ${
-                  locked ? "opacity-60 border-black/5" : "border-black/10"
+                className={`rounded-xl border transition-opacity ${
+                  locked
+                    ? "opacity-60 border-white/5 bg-earth/50"
+                    : "border-white/10 bg-earth-surface"
                 }`}
               >
                 {/* Question header */}
                 <div className="flex items-start justify-between gap-4 p-5 pb-3">
-                  <p className="text-sm font-medium leading-relaxed text-zinc-800">
+                  <p className="text-sm font-medium leading-relaxed text-parchment">
                     {question.question_text}
                   </p>
-                  <span className="shrink-0 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
+                  <span className="shrink-0 rounded-full bg-ocean-blue/20 px-2.5 py-0.5 text-xs font-semibold text-ocean-blue">
                     {question.point_value} pt{question.point_value !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -171,19 +173,19 @@ export default function PredictionsForm({
                 <div className="px-5 pb-4">
                   {locked ? (
                     // Locked state
-                    <div className="rounded-lg bg-zinc-100 px-3 py-2.5">
+                    <div className="rounded-lg bg-earth border border-white/10 px-3 py-2.5">
                       {submittedPlayer ? (
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full overflow-hidden shrink-0">
                             <PlayerAvatar player={submittedPlayer} />
                           </div>
                           <div>
-                            <p className="text-xs text-zinc-400">🔒 Your pick</p>
-                            <p className="text-sm font-semibold text-zinc-700">{submittedPlayer.name}</p>
+                            <p className="text-xs text-parchment/40">🔒 Your pick</p>
+                            <p className="text-sm font-semibold text-parchment">{submittedPlayer.name}</p>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-zinc-500">
+                        <p className="text-sm text-parchment/50">
                           🔒{" "}
                           {hasAnswer
                             ? `Your answer: "${answers[question.id]}"`
@@ -208,13 +210,13 @@ export default function PredictionsForm({
                         setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))
                       }
                       placeholder="Your prediction..."
-                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200 transition-shadow"
+                      className="w-full rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/30 transition-shadow"
                     />
                   )}
                 </div>
 
                 {/* Lock time */}
-                <p className="px-5 pb-3 text-xs text-zinc-400">
+                <p className="px-5 pb-3 text-xs text-parchment/40">
                   {locked
                     ? `Locked ${new Date(question.lock_time).toLocaleString()}`
                     : `Locks ${new Date(question.lock_time).toLocaleString()}`}
@@ -225,7 +227,7 @@ export default function PredictionsForm({
         </div>
 
         {isMock && (
-          <div className="mb-4 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+          <div className="mb-4 rounded-lg border border-amber-100/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
             <span className="font-semibold">Preview only</span> — add this question via the Admin panel to enable saving.
           </div>
         )}
@@ -234,8 +236,8 @@ export default function PredictionsForm({
           <div
             className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${
               toast.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-100"
-                : "bg-red-50 text-red-700 border border-red-100"
+                ? "bg-survivor-green/10 text-survivor-green border border-survivor-green/20"
+                : "bg-tribal-red/10 text-tribal-red border border-tribal-red/20"
             }`}
           >
             {toast.message}
@@ -246,14 +248,14 @@ export default function PredictionsForm({
           <button
             type="submit"
             disabled={saving}
-            className="w-full rounded-full bg-orange-600 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+            className="w-full rounded-full bg-survivor-green py-3 text-sm font-semibold text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
           >
             {saving ? "Saving..." : "Save Predictions"}
           </button>
         )}
 
         {allLocked && (
-          <div className="rounded-full bg-zinc-100 py-3 text-center text-sm font-medium text-zinc-500">
+          <div className="rounded-full bg-earth border border-white/10 py-3 text-center text-sm font-medium text-parchment/50">
             🔒 All predictions are locked for this episode
           </div>
         )}
@@ -261,25 +263,25 @@ export default function PredictionsForm({
 
       {/* ── Confirmation Modal ── */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-earth-surface border border-white/10 shadow-2xl overflow-hidden">
             {/* Header */}
             <div className="px-6 pt-6 pb-4 text-center">
-              <h2 className="text-lg font-bold text-zinc-900">Confirm Prediction</h2>
-              <p className="text-sm text-zinc-500 mt-1">
+              <h2 className="text-lg font-bold text-parchment">Confirm Prediction</h2>
+              <p className="text-sm text-parchment/50 mt-1">
                 Are you sure about your pick?
               </p>
             </div>
 
             {/* Selected player — for elimination question */}
             {selectedPlayer && (
-              <div className="flex flex-col items-center gap-3 py-4 px-6 bg-orange-50 border-y border-orange-100">
-                <div className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-orange-300 ring-offset-2">
+              <div className="flex flex-col items-center gap-3 py-4 px-6 bg-survivor-green/10 border-y border-survivor-green/20">
+                <div className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-survivor-green ring-offset-2 ring-offset-earth-surface">
                   <PlayerAvatar player={selectedPlayer} />
                 </div>
                 <div className="text-center">
-                  <p className="text-base font-bold text-zinc-900">{selectedPlayer.name}</p>
-                  <p className="text-sm text-zinc-500 mt-0.5">will be eliminated tonight</p>
+                  <p className="text-base font-bold text-parchment">{selectedPlayer.name}</p>
+                  <p className="text-sm text-parchment/50 mt-0.5">will be eliminated tonight</p>
                 </div>
               </div>
             )}
@@ -293,9 +295,9 @@ export default function PredictionsForm({
               .map((u) => {
                 const q = sortedQuestions.find((q) => q.id === u.question_id)!;
                 return (
-                  <div key={u.question_id} className="px-6 py-3 border-b border-black/5 last:border-0">
-                    <p className="text-xs text-zinc-400 mb-0.5 truncate">{q.question_text}</p>
-                    <p className="text-sm font-medium text-zinc-800">{u.predicted_answer}</p>
+                  <div key={u.question_id} className="px-6 py-3 border-b border-white/5 last:border-0">
+                    <p className="text-xs text-parchment/40 mb-0.5 truncate">{q.question_text}</p>
+                    <p className="text-sm font-medium text-parchment">{u.predicted_answer}</p>
                   </div>
                 );
               })}
@@ -305,7 +307,7 @@ export default function PredictionsForm({
               <button
                 type="button"
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 rounded-full border border-black/10 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
+                className="flex-1 rounded-full border border-white/10 py-2.5 text-sm font-medium text-parchment hover:bg-white/5 transition-colors"
               >
                 ← Change
               </button>
@@ -313,7 +315,7 @@ export default function PredictionsForm({
                 type="button"
                 onClick={() => doSave(pendingUpserts)}
                 disabled={saving}
-                className="flex-1 rounded-full bg-orange-600 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                className="flex-1 rounded-full bg-survivor-green py-2.5 text-sm font-semibold text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
               >
                 {saving ? "Saving..." : "Confirm →"}
               </button>

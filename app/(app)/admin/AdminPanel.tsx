@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { SEASON_50_PLAYERS } from "@/app/(app)/predictions/players";
 
 type Episode = {
   id: number;
@@ -20,7 +21,7 @@ type Question = {
   episodes: { episode_number: number } | null;
 };
 
-type Tab = "episodes" | "questions" | "scoring";
+type Tab = "episodes" | "questions" | "scoring" | "season";
 
 type Message = { type: "success" | "error"; text: string };
 
@@ -108,6 +109,44 @@ export default function AdminPanel({
     }
   }
 
+  // ── Scoring quick-fill ────────────────────────────────
+  const [tribeNames, setTribeNames] = useState<string[]>([]);
+  useEffect(() => {
+    supabase
+      .from("tribe_states")
+      .select("tribe_name")
+      .neq("tribe_name", "Eliminated")
+      .then(({ data }) => {
+        setTribeNames([...new Set(data?.map((r) => r.tribe_name) ?? [])]);
+      });
+  }, []);
+
+  // ── Season State ──────────────────────────────────────
+  const [seasonLoading, setSeasonLoading] = useState(false);
+  const [seasonMsg, setSeasonMsg] = useState<Message | null>(null);
+
+  async function handleRefetchSeason() {
+    setSeasonLoading(true);
+    setSeasonMsg(null);
+    try {
+      const res = await fetch("/api/refetch-season", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setSeasonMsg({
+          type: "success",
+          text: `Updated ${data.playersCount} players across ${data.tribesCount} tribes (Episode ${data.episodeNumber})`,
+        });
+        router.refresh();
+      } else {
+        setSeasonMsg({ type: "error", text: data.error ?? "Unknown error" });
+      }
+    } catch (err) {
+      setSeasonMsg({ type: "error", text: err instanceof Error ? err.message : "Request failed" });
+    } finally {
+      setSeasonLoading(false);
+    }
+  }
+
   // ── Scoring form ──────────────────────────────────────
   const [scoreQId, setScoreQId] = useState(questions[0]?.id?.toString() ?? "");
   const [correctAnswer, setCorrectAnswer] = useState("");
@@ -157,6 +196,7 @@ export default function AdminPanel({
     { id: "episodes", label: "Episodes" },
     { id: "questions", label: "Questions" },
     { id: "scoring", label: "Scoring" },
+    { id: "season", label: "Season" },
   ];
 
   return (
@@ -175,7 +215,7 @@ export default function AdminPanel({
             className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
               tab === t.id
                 ? "bg-white text-zinc-900 shadow-sm"
-                : "text-zinc-500 hover:text-zinc-700"
+                : "text-zinc-600 hover:text-zinc-800"
             }`}
           >
             {t.label}
@@ -367,6 +407,27 @@ export default function AdminPanel({
         </div>
       )}
 
+      {/* ── Season Tab ── */}
+      {tab === "season" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-black/10 bg-white p-5">
+            <h2 className="text-sm font-semibold text-zinc-700 mb-1">Season State</h2>
+            <p className="text-xs text-zinc-400 mb-4">
+              Fetch current tribe membership from Wikipedia.
+            </p>
+            <button
+              type="button"
+              onClick={handleRefetchSeason}
+              disabled={seasonLoading}
+              className="w-full rounded-full bg-survivor-green py-2 text-sm font-semibold text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
+            >
+              {seasonLoading ? "Fetching..." : "Refetch Season State"}
+            </button>
+            <StatusMessage msg={seasonMsg} />
+          </div>
+        </div>
+      )}
+
       {/* ── Scoring Tab ── */}
       {tab === "scoring" && (
         <div className="space-y-6">
@@ -412,6 +473,40 @@ export default function AdminPanel({
                     className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
                   />
                 </div>
+
+                {/* Quick-fill dropdowns */}
+                <div className="rounded-lg bg-zinc-50 border border-black/5 px-3 py-3 space-y-2">
+                  <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Quick fill</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-zinc-500 mb-1">Player</label>
+                      <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) setCorrectAnswer(e.target.value); }}
+                        className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                      >
+                        <option value="">— pick player —</option>
+                        {SEASON_50_PLAYERS.map((p) => (
+                          <option key={p.id} value={p.name}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-zinc-500 mb-1">Tribe</label>
+                      <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) setCorrectAnswer(e.target.value); }}
+                        className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                      >
+                        <option value="">— pick tribe —</option>
+                        {tribeNames.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   disabled={scoreLoading}

@@ -24,7 +24,7 @@ export default async function AppLayout({
   const isAdmin = profile?.is_admin ?? false;
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="min-h-screen bg-earth">
       <NavBar username={username} isAdmin={isAdmin} />
       <main className="md:pl-64 pb-20 md:pb-0">
         <div className="max-w-4xl mx-auto px-4 py-8">

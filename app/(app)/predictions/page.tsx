@@ -63,9 +63,9 @@ export default async function PredictionsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Predictions</h1>
+        <h1 className="font-display text-3xl uppercase tracking-wide text-parchment">Predictions</h1>
         {episode && (
-          <p className="text-zinc-500 mt-1">
+          <p className="text-parchment/50 mt-1">
             Episode {episode.episode_number}
             {episode.air_date &&
               ` — ${new Date(episode.air_date).toLocaleDateString("en-US", {
@@ -78,8 +78,8 @@ export default async function PredictionsPage() {
       </div>
 
       {!episode && (
-        <div className="rounded-xl border border-black/10 bg-white p-8 text-center">
-          <p className="text-zinc-400 text-sm">No episodes yet — check back soon!</p>
+        <div className="rounded-xl border border-white/10 bg-earth-surface p-8 text-center">
+          <p className="text-parchment/40 text-sm">No episodes yet — check back soon!</p>
         </div>
       )}
 
