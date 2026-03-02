@@ -22,7 +22,7 @@ export default async function AdminPage() {
     supabase.from("episodes").select("*").order("episode_number", { ascending: false }),
     supabase
       .from("questions")
-      .select("id, episode_id, question_text, point_value, correct_answer, lock_time, episodes(episode_number)")
+      .select("id, episode_id, question_text, point_value, correct_answer, lock_time, answer_type, num_players, episodes(episode_number)")
       .order("id", { ascending: false }),
   ]);
 

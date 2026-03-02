@@ -4,9 +4,8 @@ import { createClient } from "@/lib/supabaseServer";
 
 const WIKI_PAGE = "Survivor_50:_In_the_Hands_of_the_Fans";
 const SEASON = 50;
-// Section indices on the Wikipedia page (verify with ?action=parse&prop=sections if they shift)
-const TRIBE_SECTIONS = [5, 6];
-const VOTING_HISTORY_SECTION = 8;
+const CONTESTANTS_SECTION = 5;
+const SEASON_SUMMARY_SECTION = 6;
 
 // Strings that appear in Wikipedia tables but are not player names
 const WIKI_NON_PLAYERS = new Set(["none", "vatu", "beria", "solana", "tiaka"]);
@@ -40,6 +39,21 @@ async function fetchSection(index: number): Promise<string> {
   return json?.parse?.text?.["*"] ?? "";
 }
 
+/** Parse "February 25, 2026" → "2026-02-25" */
+function parseWikiDate(text: string): string | null {
+  const MONTHS: Record<string, string> = {
+    January: "01", February: "02", March: "03", April: "04",
+    May: "05", June: "06", July: "07", August: "08",
+    September: "09", October: "10", November: "11", December: "12",
+  };
+  const m = text.trim().match(/^(\w+)\s+(\d+),\s+(\d{4})$/);
+  if (!m) return null;
+  const [, month, day, year] = m;
+  const mm = MONTHS[month];
+  if (!mm) return null;
+  return `${year}-${mm}-${day.padStart(2, "0")}`;
+}
+
 export async function POST() {
   try {
     // 1. Authenticate & verify admin
@@ -71,101 +85,165 @@ export async function POST() {
 
     const episodeNumber = epData?.[0]?.episode_number ?? 0;
 
-    // 3. Fetch all sections in parallel
-    const [tribeHtmlParts, votingHtml] = await Promise.all([
-      Promise.all(TRIBE_SECTIONS.map(fetchSection)),
-      fetchSection(VOTING_HISTORY_SECTION),
+    // 3. Fetch both sections in parallel
+    const [contestantsHtml, seasonHtml] = await Promise.all([
+      fetchSection(CONTESTANTS_SECTION),
+      fetchSection(SEASON_SUMMARY_SECTION),
     ]);
 
-    const tribeHtml = tribeHtmlParts.join("\n");
+    // 4. Parse section 5 (contestants) — column-index approach
+    type PlayerRow = {
+      tribe_name: string;
+      tribe_color: string;
+      player_name: string;
+      is_eliminated: boolean;
+      day: number | null;
+    };
 
-    // 4a. Parse tribe membership from sections 5 & 6
-    type TribeRow = { tribe_name: string; tribe_color: string; player_name: string };
-    const activeRows: TribeRow[] = [];
+    const playerRows: PlayerRow[] = [];
+    const $t = cheerio.load(contestantsHtml);
 
-    const $t = cheerio.load(tribeHtml);
-    console.log(`[tribes] raw HTML (first 1000 chars):\n${tribeHtml.slice(0, 1000)}`);
-
-    $t("table.wikitable tbody tr").each((_, tr) => {
+    $t("table.wikitable tbody tr").each((rowIdx, tr) => {
       const cells = $t(tr).find("th, td");
-      if (cells.length < 2) return;
 
-      // Player name: prefer .fn hCard microformat, fall back to first cell text
+      // Log every row's cell count and first cell text to understand table structure
+      const firstCellText = cells.first().text().trim().slice(0, 40);
+      console.log(`[row ${rowIdx}] cells=${cells.length} firstCell="${firstCellText}"`);
+
+      if (cells.length < 4) {
+        console.log(`[row ${rowIdx}] SKIP: too few cells (${cells.length})`);
+        return;
+      }
+
+      // Skip header rows (first cell is a <th> with no .fn inside)
+      const firstCell = cells.first();
+      if (firstCell.is("th") && $t(tr).find(".fn").length === 0) {
+        console.log(`[row ${rowIdx}] SKIP: header row`);
+        return;
+      }
+
+      // Player name: prefer .fn hCard microformat
       const fnEl = $t(tr).find(".fn");
-      const playerName = fnEl.length
-        ? fnEl.first().text().trim()
-        : cells.first().text().trim();
+      if (!fnEl.length) {
+        console.log(`[row ${rowIdx}] SKIP: no .fn element`);
+        return;
+      }
+      const playerName = fnEl.first().text().trim();
+      if (!isValidPlayerName(playerName)) {
+        console.log(`[row ${rowIdx}] SKIP: invalid player name "${playerName}"`);
+        return;
+      }
 
-      if (!isValidPlayerName(playerName)) return;
+      // Log all cell texts to find the right column indices
+      const allCells = Array.from({ length: cells.length }, (_, i) =>
+        `[${i}]="${cells.eq(i).text().trim().slice(0, 20)}"`
+      ).join(" ");
+      console.log(`[row ${rowIdx}] player="${playerName}" cells: ${allCells}`);
 
-      // Find tribe by looking for a colored cell with a text label
-      let tribeColor = "#888888";
-      let tribeName = "";
+      // Original tribe: column index 3 (0-based)
+      const tribeCell = cells.eq(3);
+      const tribeName = tribeCell.text().trim();
+      const tdStyle = tribeCell.attr("style") ?? "";
+      const bgMatch = tdStyle.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8}|[a-z]+)/i);
+      const tribeColor = bgMatch?.[1]
+        ? bgMatch[1].startsWith("#") ? bgMatch[1] : `#${bgMatch[1]}`
+        : "#888888";
 
-      cells.each((_, td) => {
-        const bgColor = $t(td).attr("bgcolor");
-        const tdStyle = $t(td).attr("style") ?? "";
-        const bgColorFromStyle = tdStyle.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8}|[a-z]+)/i)?.[1];
-        const color = bgColor ?? bgColorFromStyle;
+      console.log(`[row ${rowIdx}] tribe col[3]: name="${tribeName}" style="${tdStyle}" color="${tribeColor}"`);
 
-        if (color && color !== "#ffffff" && color !== "white") {
-          const text = $t(td).text().trim();
-          if (text && !/^\d+$/.test(text) && text !== playerName) {
-            tribeName = text;
-            tribeColor = color.startsWith("#") ? color : `#${color}`;
-          } else if (!tribeName) {
-            tribeColor = color.startsWith("#") ? color : `#${color}`;
-          }
-        }
-      });
+      if (tribeName.length < 2) {
+        console.log(`[row ${rowIdx}] SKIP: empty/short tribe name "${tribeName}"`);
+        return;
+      }
 
-      if (!tribeName) return;
+      // Finish column: index 6 — "Day N" means eliminated
+      const finishCell = cells.eq(6);
+      const finishText = finishCell.text().trim();
+      const dayMatch = finishText.match(/Day\s*(\d+)/i);
+      const isEliminated = !!dayMatch;
+      const day = dayMatch ? parseInt(dayMatch[1]) : null;
+
+      console.log(`[row ${rowIdx}] finish col[6]: "${finishText}" → isEliminated=${isEliminated} day=${day}`);
 
       const normalizedName = normalizeName(playerName);
-      console.log(`[tribes] active: "${normalizedName}" → tribe: "${tribeName}" (${tribeColor})`);
-      activeRows.push({ tribe_name: tribeName, tribe_color: tribeColor, player_name: normalizedName });
-    });
-
-    // 4b. Parse voting history (section 8) for eliminated players in episode order
-    const eliminatedRows: TribeRow[] = [];
-
-    const $v = cheerio.load(votingHtml);
-    console.log(`[voting] raw HTML (first 1000 chars):\n${votingHtml.slice(0, 1000)}`);
-
-    $v("table.wikitable").each((_, table) => {
-      $v(table).find("tr").each((_, row) => {
-        const thText = $v(row).find("th").first().text().trim().toLowerCase();
-        if (thText !== "eliminated") return;
-
-        // Each td in this row = one episode column, left-to-right = episode order
-        $v(row).find("td").each((_, cell) => {
-          const text = $v(cell).text().trim();
-          if (!text) return;
-          // Multiple eliminations in one episode are separated by newlines or commas
-          const players = text
-            .split(/[\n,]+/)
-            .map((s) => normalizeName(s.trim()))
-            .filter(isValidPlayerName);
-          players.forEach((name) => {
-            console.log(`[voting] eliminated: "${name}"`);
-            eliminatedRows.push({ tribe_name: "Eliminated", tribe_color: "#6b7280", player_name: name });
-          });
-        });
+      console.log(`[row ${rowIdx}] PARSED: "${normalizedName}" → tribe="${tribeName}" eliminated=${isEliminated}`);
+      playerRows.push({
+        tribe_name: tribeName,
+        tribe_color: tribeColor,
+        player_name: normalizedName,
+        is_eliminated: isEliminated,
+        day,
       });
     });
 
-    console.log(`[summary] active: ${activeRows.length}, eliminated: ${eliminatedRows.length}`);
+    const tribeBreakdown = playerRows.reduce<Record<string, { active: number; eliminated: number }>>((acc, r) => {
+      if (!acc[r.tribe_name]) acc[r.tribe_name] = { active: 0, eliminated: 0 };
+      if (r.is_eliminated) acc[r.tribe_name].eliminated++;
+      else acc[r.tribe_name].active++;
+      return acc;
+    }, {});
+    console.log(`[contestants] parsed ${playerRows.length} rows across ${Object.keys(tribeBreakdown).length} tribes:`);
+    for (const [tribe, counts] of Object.entries(tribeBreakdown)) {
+      console.log(`  tribe "${tribe}": ${counts.active} active, ${counts.eliminated} eliminated`);
+    }
 
-    if (activeRows.length === 0 && eliminatedRows.length === 0) {
+    if (playerRows.length === 0) {
       return NextResponse.json(
-        { ok: false, error: "No player/tribe data parsed from Wikipedia" },
+        { ok: false, error: "No player/tribe data parsed from Wikipedia contestants section" },
         { status: 500 }
       );
     }
 
-    // 5. Delete existing rows for this season+episode, then insert fresh
-    // Active rows inserted first, then eliminated in episode order (first-eliminated first).
-    // The id column preserves this order for the dashboard query.
+    // Sort: active first (day=null), then eliminated sorted by day ascending
+    const activeRows = playerRows.filter((r) => !r.is_eliminated);
+    const eliminatedRows = [...playerRows.filter((r) => r.is_eliminated)].sort(
+      (a, b) => (a.day ?? 0) - (b.day ?? 0)
+    );
+
+    // 5. Parse section 6 (season summary) for episode upserts
+    type EpisodeRow = { number: number; title: string | null; airDate: string | null };
+    const parsedEpisodes: EpisodeRow[] = [];
+
+    const $s = cheerio.load(seasonHtml);
+    $s("table.wikitable tr").each((_, tr) => {
+      const ths = $s(tr).find("th");
+      const tds = $s(tr).find("td");
+      if (ths.length === 0 || tds.length === 0) return;
+
+      const epNumText = ths.first().text().trim();
+      const epNum = parseInt(epNumText);
+      if (isNaN(epNum)) return;
+
+      // Title is in quotes in first td; air date in second td
+      const rawTitle = tds.eq(0).text().trim().replace(/^[""]|[""]$/g, "").trim();
+      const title = rawTitle || null;
+      const airDateText = tds.eq(1).text().trim();
+      const airDate = parseWikiDate(airDateText);
+
+      parsedEpisodes.push({ number: epNum, title, airDate });
+    });
+
+    console.log(`[season summary] parsed ${parsedEpisodes.length} episodes`);
+
+    // 6. Upsert episodes from season summary
+    let episodesUpserted = 0;
+    if (parsedEpisodes.length > 0) {
+      const { error: epErr } = await supabase.from("episodes").upsert(
+        parsedEpisodes.map((ep) => ({
+          episode_number: ep.number,
+          title: ep.title,
+          air_date: ep.airDate,
+        })),
+        { onConflict: "episode_number" }
+      );
+      if (epErr) {
+        console.error("[episodes upsert error]", epErr.message);
+      } else {
+        episodesUpserted = parsedEpisodes.length;
+      }
+    }
+
+    // 7. Delete existing tribe_states for season+episode, then insert fresh
     await supabase
       .from("tribe_states")
       .delete()
@@ -178,6 +256,7 @@ export async function POST() {
       tribe_name: r.tribe_name,
       tribe_color: r.tribe_color,
       player_name: r.player_name,
+      is_eliminated: r.is_eliminated,
     }));
 
     const { error: insertErr } = await supabase.from("tribe_states").insert(insertRows);
@@ -193,6 +272,7 @@ export async function POST() {
       tribesCount: uniqueTribes,
       playersCount: activeRows.length,
       eliminatedCount: eliminatedRows.length,
+      episodesUpserted,
       episodeNumber,
     });
   } catch (err) {

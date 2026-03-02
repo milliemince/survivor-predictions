@@ -15,6 +15,29 @@ type Episode = {
   questions: Question[];
 };
 
+/** Returns today's date as "YYYY-MM-DD" in US Eastern time. */
+function todayEastern(): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === "year")!.value;
+  const m = parts.find((p) => p.type === "month")!.value;
+  const d = parts.find((p) => p.type === "day")!.value;
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Format a "YYYY-MM-DD" air date string for display.
+ * Constructs a local Date to avoid UTC-midnight timezone shift.
+ */
+function formatAirDate(airDate: string, opts: Intl.DateTimeFormatOptions): string {
+  const [y, mo, d] = airDate.split("-").map(Number);
+  return new Date(y, mo - 1, d).toLocaleDateString("en-US", opts);
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
@@ -26,14 +49,16 @@ export default async function DashboardPage() {
   const [profileResult, leaderboardResult, episodesResult, tribeResult] = await Promise.all([
     supabase.from("profiles").select("username").eq("id", user.id).single(),
     supabase.from("leaderboard").select("total_points, rank").eq("user_id", user.id).single(),
+    // Next upcoming episode: earliest air_date that is today or in the future (Eastern time)
     supabase
       .from("episodes")
       .select("id, episode_number, air_date, questions(id, lock_time)")
-      .order("episode_number", { ascending: false })
+      .gte("air_date", todayEastern())
+      .order("air_date", { ascending: true })
       .limit(1),
     supabase
       .from("tribe_states")
-      .select("id, tribe_name, tribe_color, player_name, episode_number")
+      .select("id, tribe_name, tribe_color, player_name, is_eliminated, episode_number")
       .eq("season", 50)
       .order("episode_number", { ascending: false })
       .order("id", { ascending: true })
@@ -65,27 +90,29 @@ export default async function DashboardPage() {
     .filter((r) => r.episode_number === maxEp)
     .filter((r) => {
       const n = r.player_name?.toLowerCase();
-      return n && n.length >= 2 && !["none", "vatu", "beria", "solana", "tiaka"].includes(n);
+      return n && n.length >= 2 && !["none"].includes(n);
     });
 
-  const tribeMap: Record<string, { color: string; players: string[] }> = {};
-  // eliminated is already sorted id ASC (first-eliminated first) from the query
+  const tribeMap: Record<string, { color: string; players: string[]; eliminatedPlayers: string[] }> = {};
+  // eliminated is sorted id ASC (first-eliminated first) from the query
   const eliminated: string[] = [];
 
   for (const row of latestTribeRows) {
-    if (row.tribe_name === "Eliminated") {
+    if (!tribeMap[row.tribe_name]) {
+      tribeMap[row.tribe_name] = { color: row.tribe_color, players: [], eliminatedPlayers: [] };
+    }
+    if (row.is_eliminated) {
+      tribeMap[row.tribe_name].eliminatedPlayers.push(row.player_name);
       eliminated.push(row.player_name);
     } else {
-      if (!tribeMap[row.tribe_name]) {
-        tribeMap[row.tribe_name] = { color: row.tribe_color, players: [] };
-      }
       tribeMap[row.tribe_name].players.push(row.player_name);
     }
   }
-  const tribes: TribeData[] = Object.entries(tribeMap).map(([name, { color, players }]) => ({
+  const tribes: TribeData[] = Object.entries(tribeMap).map(([name, { color, players, eliminatedPlayers }]) => ({
     name,
     color,
     players,
+    eliminatedPlayers,
   }));
 
   return (
@@ -131,7 +158,7 @@ export default async function DashboardPage() {
               </h2>
               {latestEpisode.air_date && (
                 <p className="text-sm text-parchment/50 mt-0.5">
-                  {new Date(latestEpisode.air_date).toLocaleDateString("en-US", {
+                  {formatAirDate(latestEpisode.air_date, {
                     weekday: "long",
                     month: "long",
                     day: "numeric",
@@ -147,11 +174,13 @@ export default async function DashboardPage() {
               <p className="text-sm font-semibold text-survivor-green">
                 ⏰ Predictions lock{" "}
                 {nextLockDate.toLocaleString("en-US", {
+                  timeZone: "America/New_York",
                   weekday: "short",
                   month: "short",
                   day: "numeric",
                   hour: "numeric",
                   minute: "2-digit",
+                  timeZoneName: "short",
                 })}
               </p>
               {openQuestions > 0 && (

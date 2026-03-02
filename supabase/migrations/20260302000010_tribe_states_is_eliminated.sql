@@ -1,0 +1,2 @@
+ALTER TABLE tribe_states
+  ADD COLUMN is_eliminated BOOLEAN NOT NULL DEFAULT FALSE;

@@ -10,6 +10,8 @@ type Question = {
   question_text: string;
   point_value: number;
   lock_time: string;
+  answer_type: "player" | "tribe" | "free";
+  num_players: number;
 };
 
 type Episode = {
@@ -24,26 +26,17 @@ type Upsert = {
   predicted_answer: string;
 };
 
-/** Detects questions that should use the player-picker instead of a text input. */
-function isEliminationQuestion(text: string): boolean {
-  const lower = text.toLowerCase();
-  return (
-    lower.includes("eliminat") ||
-    lower.includes("voted out") ||
-    lower.includes("going home") ||
-    lower.includes("who is leaving")
-  );
-}
-
 export default function PredictionsForm({
   episode,
   userId,
   existingPredictions,
+  tribeNames = [],
   isMock = false,
 }: {
   episode: Episode;
   userId: string;
   existingPredictions: Record<number, string>;
+  tribeNames?: string[];
   isMock?: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<number, string>>(existingPredictions);
@@ -64,17 +57,23 @@ export default function PredictionsForm({
     (a, b) => new Date(a.lock_time).getTime() - new Date(b.lock_time).getTime()
   );
 
-  // The elimination question (if any) that the user has answered
-  const eliminationQuestion = sortedQuestions.find(
-    (q) => isEliminationQuestion(q.question_text) && !isLocked(q.lock_time)
-  );
-  const selectedPlayerId = eliminationQuestion ? (answers[eliminationQuestion.id] ?? "") : "";
-  const selectedPlayer = SEASON_50_PLAYERS.find((p) => p.name === selectedPlayerId) ?? null;
+  function handlePlayerSelect(questionId: number, playerIds: string[]) {
+    // Store comma-separated player names as predicted_answer
+    const names = playerIds
+      .map((id) => SEASON_50_PLAYERS.find((p) => p.id === id)?.name ?? "")
+      .filter(Boolean)
+      .join(",");
+    setAnswers((prev) => ({ ...prev, [questionId]: names }));
+  }
 
-  function handlePlayerSelect(questionId: number, playerId: string) {
-    const player = SEASON_50_PLAYERS.find((p) => p.id === playerId);
-    // Store the player's name as the predicted answer (matches scoring comparison)
-    setAnswers((prev) => ({ ...prev, [questionId]: player?.name ?? "" }));
+  /** Returns the player IDs currently selected for a player-type question */
+  function getSelectedPlayerIds(questionId: number): string[] {
+    const val = answers[questionId] ?? "";
+    if (!val) return [];
+    return val
+      .split(",")
+      .map((name) => SEASON_50_PLAYERS.find((p) => p.name === name.trim())?.id ?? "")
+      .filter(Boolean);
   }
 
   function buildUpserts(): Upsert[] {
@@ -98,13 +97,12 @@ export default function PredictionsForm({
       return;
     }
 
-    const hasElimination = upserts.some((u) => {
+    const hasPlayerQuestion = upserts.some((u) => {
       const q = sortedQuestions.find((q) => q.id === u.question_id);
-      return q && isEliminationQuestion(q.question_text);
+      return q?.answer_type === "player";
     });
 
-    if (hasElimination) {
-      // Show confirmation modal before saving
+    if (hasPlayerQuestion) {
       setPendingUpserts(upserts);
       setShowConfirm(true);
     } else {
@@ -142,13 +140,17 @@ export default function PredictionsForm({
         <div className="space-y-4 mb-6">
           {sortedQuestions.map((question) => {
             const locked = isLocked(question.lock_time);
-            const isElimination = isEliminationQuestion(question.question_text);
+            const isPlayerQuestion = question.answer_type === "player";
+            const isTribeQuestion = question.answer_type === "tribe";
             const hasAnswer = !!answers[question.id];
 
-            // For a locked elimination question, find the submitted player
-            const submittedPlayer = locked && isElimination && hasAnswer
-              ? SEASON_50_PLAYERS.find((p) => p.name === answers[question.id]) ?? null
-              : null;
+            // For a locked player question, find the submitted player(s)
+            const submittedPlayers = locked && isPlayerQuestion && hasAnswer
+              ? (answers[question.id] ?? "")
+                  .split(",")
+                  .map((name) => SEASON_50_PLAYERS.find((p) => p.name === name.trim()) ?? null)
+                  .filter(Boolean)
+              : [];
 
             return (
               <div
@@ -174,14 +176,18 @@ export default function PredictionsForm({
                   {locked ? (
                     // Locked state
                     <div className="rounded-lg bg-earth border border-white/10 px-3 py-2.5">
-                      {submittedPlayer ? (
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full overflow-hidden shrink-0">
-                            <PlayerAvatar player={submittedPlayer} />
-                          </div>
-                          <div>
-                            <p className="text-xs text-parchment/40">🔒 Your pick</p>
-                            <p className="text-sm font-semibold text-parchment">{submittedPlayer.name}</p>
+                      {submittedPlayers.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-parchment/40">🔒 Your pick{submittedPlayers.length > 1 ? "s" : ""}</p>
+                          <div className="flex flex-wrap gap-3">
+                            {submittedPlayers.map((p) => p && (
+                              <div key={p.id} className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+                                  <PlayerAvatar player={p} />
+                                </div>
+                                <span className="text-sm font-semibold text-parchment">{p.name}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       ) : (
@@ -193,16 +199,31 @@ export default function PredictionsForm({
                         </p>
                       )}
                     </div>
-                  ) : isElimination ? (
-                    // Player selector
+                  ) : isPlayerQuestion ? (
+                    // Player selector (multi-select)
                     <PlayerSelector
-                      selected={
-                        SEASON_50_PLAYERS.find((p) => p.name === answers[question.id])?.id ?? ""
-                      }
-                      onChange={(playerId) => handlePlayerSelect(question.id, playerId)}
+                      selected={getSelectedPlayerIds(question.id)}
+                      onChange={(playerIds) => handlePlayerSelect(question.id, playerIds)}
+                      maxSelections={question.num_players}
                     />
+                  ) : isTribeQuestion ? (
+                    // Tribe dropdown
+                    <select
+                      value={answers[question.id] ?? ""}
+                      onChange={(e) =>
+                        setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment outline-none focus:ring-2 focus:ring-survivor-green/30 transition-shadow"
+                    >
+                      <option value="">— pick a tribe —</option>
+                      {tribeNames.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
-                    // Text input for other question types
+                    // Free text input
                     <input
                       type="text"
                       value={answers[question.id] ?? ""}
@@ -218,8 +239,8 @@ export default function PredictionsForm({
                 {/* Lock time */}
                 <p className="px-5 pb-3 text-xs text-parchment/40">
                   {locked
-                    ? `Locked ${new Date(question.lock_time).toLocaleString()}`
-                    : `Locks ${new Date(question.lock_time).toLocaleString()}`}
+                    ? `Locked ${new Date(question.lock_time).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`
+                    : `Locks ${new Date(question.lock_time).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`}
                 </p>
               </div>
             );
@@ -269,28 +290,48 @@ export default function PredictionsForm({
             <div className="px-6 pt-6 pb-4 text-center">
               <h2 className="text-lg font-bold text-parchment">Confirm Prediction</h2>
               <p className="text-sm text-parchment/50 mt-1">
-                Are you sure about your pick?
+                Are you sure about your pick{pendingUpserts.filter((u) => sortedQuestions.find((q) => q.id === u.question_id)?.answer_type === "player").length > 0 ? "s" : ""}?
               </p>
             </div>
 
-            {/* Selected player — for elimination question */}
-            {selectedPlayer && (
-              <div className="flex flex-col items-center gap-3 py-4 px-6 bg-survivor-green/10 border-y border-survivor-green/20">
-                <div className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-survivor-green ring-offset-2 ring-offset-earth-surface">
-                  <PlayerAvatar player={selectedPlayer} />
-                </div>
-                <div className="text-center">
-                  <p className="text-base font-bold text-parchment">{selectedPlayer.name}</p>
-                  <p className="text-sm text-parchment/50 mt-0.5">will be eliminated tonight</p>
-                </div>
-              </div>
-            )}
+            {/* Player question answers */}
+            {pendingUpserts
+              .filter((u) => {
+                const q = sortedQuestions.find((q) => q.id === u.question_id);
+                return q?.answer_type === "player";
+              })
+              .map((u) => {
+                const playerNames = u.predicted_answer.split(",").map((n) => n.trim());
+                const players = playerNames
+                  .map((name) => SEASON_50_PLAYERS.find((p) => p.name === name) ?? null)
+                  .filter(Boolean);
+                return (
+                  <div
+                    key={u.question_id}
+                    className="flex flex-col items-center gap-3 py-4 px-6 bg-survivor-green/10 border-y border-survivor-green/20"
+                  >
+                    <div className="flex gap-3 justify-center flex-wrap">
+                      {players.map((p) => p && (
+                        <div key={p.id} className="flex flex-col items-center gap-1">
+                          <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-survivor-green ring-offset-2 ring-offset-earth-surface">
+                            <PlayerAvatar player={p} />
+                          </div>
+                          <p className="text-sm font-bold text-parchment">{p.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-sm text-parchment/50">
+                      {players.length === 1 ? "will be eliminated tonight" : "your picks"}
+                    </p>
+                  </div>
+                );
+              })}
 
             {/* Other answers summary */}
             {pendingUpserts
               .filter((u) => {
                 const q = sortedQuestions.find((q) => q.id === u.question_id);
-                return q && !isEliminationQuestion(q.question_text);
+                return q?.answer_type !== "player";
               })
               .map((u) => {
                 const q = sortedQuestions.find((q) => q.id === u.question_id)!;

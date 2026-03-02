@@ -6,7 +6,8 @@ import { PlayerAvatar } from "@/app/(app)/predictions/PlayerSelector";
 export type TribeData = {
   name: string;
   color: string;
-  players: string[];
+  players: string[];           // active players
+  eliminatedPlayers: string[]; // eliminated players (shown greyed out in same card)
 };
 
 function PlayerIcon({ playerName, dimmed = false }: { playerName: string; dimmed?: boolean }) {
@@ -64,7 +65,7 @@ export default function TribeGrid({
             Current Tribes
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {tribes.map(({ name: tribeName, color, players }) => (
+            {tribes.map(({ name: tribeName, color, players, eliminatedPlayers }) => (
               <div
                 key={tribeName}
                 className="rounded-xl border border-white/10 bg-earth-surface overflow-hidden"
@@ -80,12 +81,23 @@ export default function TribeGrid({
                   </p>
                   <p className="ml-auto text-xs text-parchment/40">{players.length} left</p>
                 </div>
-                {/* Player avatars */}
+                {/* Active player avatars */}
                 <div className="px-4 py-3 flex flex-wrap gap-2">
                   {players.map((name) => (
                     <PlayerIcon key={name} playerName={name} />
                   ))}
                 </div>
+                {/* Eliminated members of this tribe (dimmed, separated by divider) */}
+                {eliminatedPlayers.length > 0 && (
+                  <>
+                    <div className="mx-4 border-t border-white/10" />
+                    <div className="px-4 py-2 flex flex-wrap gap-2">
+                      {eliminatedPlayers.map((name) => (
+                        <PlayerIcon key={name} playerName={name} dimmed />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

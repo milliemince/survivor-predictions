@@ -1,0 +1,3 @@
+ALTER TABLE questions
+  ADD COLUMN answer_type TEXT NOT NULL DEFAULT 'free',
+  ADD COLUMN num_players INT NOT NULL DEFAULT 1;

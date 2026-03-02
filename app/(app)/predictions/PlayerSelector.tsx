@@ -40,67 +40,95 @@ export function PlayerAvatar({
   );
 }
 
-/** Grid of every Season 50 player as a selectable circular card. */
+/** Grid of every Season 50 player as a selectable circular card. Supports multi-select. */
 export default function PlayerSelector({
   selected,
   onChange,
   disabled = false,
+  maxSelections = 1,
 }: {
-  selected: string;
-  onChange: (playerId: string) => void;
+  selected: string[];
+  onChange: (playerIds: string[]) => void;
   disabled?: boolean;
+  maxSelections?: number;
 }) {
+  const selectionCount = selected.length;
+  const atMax = selectionCount >= maxSelections;
+
   return (
-    <div className="grid grid-cols-4 gap-x-3 gap-y-10">
-      {SEASON_50_PLAYERS.map((player) => {
-        const isSelected = selected === player.id;
-        return (
-          <button
-            key={player.id}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(isSelected ? "" : player.id)}
-            className={`flex flex-col items-center gap-1.5 group focus:outline-none disabled:pointer-events-none`}
-          >
-            {/* Circle */}
-            <div
-              className={`relative w-full aspect-square rounded-full overflow-hidden transition-all duration-150 ${
-                isSelected
-                  ? "ring-[3px] ring-survivor-green ring-offset-2 ring-offset-earth-surface scale-105"
-                  : "ring-2 ring-transparent group-hover:ring-white/30"
-              } ${disabled ? "opacity-50" : ""}`}
-            >
-              <PlayerAvatar player={player} />
+    <div>
+      {maxSelections > 1 && (
+        <p className="text-xs text-parchment/50 mb-3 text-right">
+          {selectionCount} / {maxSelections} selected
+        </p>
+      )}
+      <div className="grid grid-cols-6 gap-x-2 gap-y-6">
+        {SEASON_50_PLAYERS.map((player) => {
+          const isSelected = selected.includes(player.id);
+          const isDisabledByMax = !isSelected && atMax;
 
-              {/* Selected checkmark overlay */}
-              {isSelected && (
-                <div className="absolute inset-0 bg-survivor-green/20 flex items-center justify-center">
-                  <div className="w-5 h-5 rounded-full bg-survivor-green flex items-center justify-center shadow">
-                    <svg
-                      className="w-3 h-3 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={3}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Name */}
-            <span
-              className={`text-sm font-bold leading-tight text-center line-clamp-2 w-full transition-colors ${
-                isSelected ? "text-survivor-green" : "text-parchment/60 group-hover:text-parchment"
+          return (
+            <button
+              key={player.id}
+              type="button"
+              disabled={disabled || isDisabledByMax}
+              onClick={() => {
+                if (isSelected) {
+                  onChange(selected.filter((id) => id !== player.id));
+                } else if (!atMax) {
+                  onChange([...selected, player.id]);
+                }
+              }}
+              className={`flex flex-col items-center gap-1.5 group focus:outline-none ${
+                isDisabledByMax ? "pointer-events-none" : ""
               }`}
             >
-              {player.name}
-            </span>
-          </button>
-        );
-      })}
+              {/* Circle */}
+              <div
+                className={`relative w-full aspect-square rounded-full overflow-hidden transition-all duration-150 ${
+                  isSelected
+                    ? "ring-[3px] ring-survivor-green ring-offset-2 ring-offset-earth-surface scale-105"
+                    : isDisabledByMax
+                    ? "ring-2 ring-transparent opacity-30"
+                    : "ring-2 ring-transparent group-hover:ring-white/30"
+                } ${disabled ? "opacity-50" : ""}`}
+              >
+                <PlayerAvatar player={player} />
+
+                {/* Selected checkmark overlay */}
+                {isSelected && (
+                  <div className="absolute inset-0 bg-survivor-green/20 flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full bg-survivor-green flex items-center justify-center shadow">
+                      <svg
+                        className="w-3 h-3 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Name */}
+              <span
+                className={`text-xs font-semibold leading-tight text-center line-clamp-2 w-full transition-colors ${
+                  isSelected
+                    ? "text-survivor-green"
+                    : isDisabledByMax
+                    ? "text-parchment/20"
+                    : "text-parchment/60 group-hover:text-parchment"
+                }`}
+              >
+                {player.name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

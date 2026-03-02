@@ -1,0 +1,5 @@
+Get Contestants:
+curl "https://en.wikipedia.org/w/api.php?action=parse&page=Survivor_50%3A_In_the_Hands_of_the_Fans&prop=text&section=5&format=json"
+
+Get Season Summary:
+curl "https://en.wikipedia.org/w/api.php?action=parse&page=Survivor_50%3A_In_the_Hands_of_the_Fans&prop=text&section=6&format=json"

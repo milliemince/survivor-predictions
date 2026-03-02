@@ -1,12 +1,14 @@
 import { createClient } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
-import PredictionsForm from "./PredictionsForm";
+import PredictionsPageWrapper from "./PredictionsPageWrapper";
 
 type Question = {
   id: number;
   question_text: string;
   point_value: number;
   lock_time: string;
+  answer_type: "player" | "tribe" | "free";
+  num_players: number;
 };
 
 type Episode = {
@@ -16,15 +18,14 @@ type Episode = {
   questions: Question[];
 };
 
-// Shown when the episode exists but has no questions in the DB yet.
-// id < 0 flags it as a mock so PredictionsForm skips saving it.
-// TODO: Remove once real questions are added via the Admin panel.
 const MOCK_QUESTIONS: Question[] = [
   {
     id: -1,
     question_text: "Who is getting eliminated tonight?",
     point_value: 1,
     lock_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    answer_type: "player" as const,
+    num_players: 1,
   },
 ];
 
@@ -36,13 +37,29 @@ export default async function PredictionsPage() {
 
   if (!user) redirect("/login");
 
-  const { data: episodes } = await supabase
-    .from("episodes")
-    .select("id, episode_number, air_date, questions(id, question_text, point_value, lock_time)")
-    .order("episode_number", { ascending: false })
-    .limit(1);
+  const [{ data: episodes }, { data: tribeStateRows }, { data: seasonPredRows }] =
+    await Promise.all([
+      supabase
+        .from("episodes")
+        .select("id, episode_number, air_date, questions(id, question_text, point_value, lock_time, answer_type, num_players)")
+        .order("episode_number", { ascending: false })
+        .limit(1),
+      supabase
+        .from("tribe_states")
+        .select("tribe_name")
+        .eq("season", 50)
+        .eq("is_eliminated", false),
+      supabase
+        .from("season_predictions")
+        .select("milestone, player_names")
+        .eq("user_id", user.id),
+    ]);
 
   const episode: Episode | null = episodes?.[0] ?? null;
+  const tribeNames: string[] = [...new Set((tribeStateRows ?? []).map((r) => r.tribe_name))];
+  const existingSeasonPredictions: Record<string, string> = Object.fromEntries(
+    (seasonPredRows ?? []).map((r) => [r.milestone, r.player_names])
+  );
 
   let existingPredictions: Record<number, string> = {};
   if (episode && episode.questions.length > 0) {
@@ -60,40 +77,43 @@ export default async function PredictionsPage() {
     }
   }
 
+  const episodeForForm = episode
+    ? {
+        ...episode,
+        questions: episode.questions.length > 0 ? episode.questions : MOCK_QUESTIONS,
+      }
+    : null;
+
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-display text-3xl uppercase tracking-wide text-parchment">Predictions</h1>
+        <h1 className="font-display text-3xl uppercase tracking-wide text-parchment">
+          Predictions
+        </h1>
         {episode && (
           <p className="text-parchment/50 mt-1">
             Episode {episode.episode_number}
             {episode.air_date &&
-              ` — ${new Date(episode.air_date).toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}`}
+              (() => {
+                const [y, mo, d] = episode.air_date.split("-").map(Number);
+                return ` — ${new Date(y, mo - 1, d).toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}`;
+              })()}
           </p>
         )}
       </div>
 
-      {!episode && (
-        <div className="rounded-xl border border-white/10 bg-earth-surface p-8 text-center">
-          <p className="text-parchment/40 text-sm">No episodes yet — check back soon!</p>
-        </div>
-      )}
-
-      {episode && (
-        <PredictionsForm
-          episode={{
-            ...episode,
-            questions: episode.questions.length > 0 ? episode.questions : MOCK_QUESTIONS,
-          }}
-          userId={user.id}
-          existingPredictions={existingPredictions}
-          isMock={episode.questions.length === 0}
-        />
-      )}
+      <PredictionsPageWrapper
+        episode={episodeForForm}
+        userId={user.id}
+        existingPredictions={existingPredictions}
+        existingSeasonPredictions={existingSeasonPredictions}
+        tribeNames={tribeNames}
+        isMock={episode !== null && episode.questions.length === 0}
+      />
     </div>
   );
 }

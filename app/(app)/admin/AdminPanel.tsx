@@ -18,6 +18,8 @@ type Question = {
   point_value: number;
   correct_answer: string | null;
   lock_time: string;
+  answer_type: string;
+  num_players: number;
   episodes: { episode_number: number } | null;
 };
 
@@ -80,6 +82,8 @@ export default function AdminPanel({
   const [qText, setQText] = useState("");
   const [qPoints, setQPoints] = useState("1");
   const [qLockTime, setQLockTime] = useState("");
+  const [qAnswerType, setQAnswerType] = useState<"free" | "player" | "tribe">("free");
+  const [qNumPlayers, setQNumPlayers] = useState("1");
   const [qLoading, setQLoading] = useState(false);
   const [qMsg, setQMsg] = useState<Message | null>(null);
 
@@ -96,6 +100,8 @@ export default function AdminPanel({
       question_text: qText.trim(),
       point_value: parseInt(qPoints),
       lock_time: qLockTime,
+      answer_type: qAnswerType,
+      num_players: qAnswerType === "player" ? parseInt(qNumPlayers) : 1,
     });
     setQLoading(false);
     if (error) {
@@ -105,6 +111,8 @@ export default function AdminPanel({
       setQText("");
       setQPoints("1");
       setQLockTime("");
+      setQAnswerType("free");
+      setQNumPlayers("1");
       router.refresh();
     }
   }
@@ -134,7 +142,7 @@ export default function AdminPanel({
       if (data.ok) {
         setSeasonMsg({
           type: "success",
-          text: `Updated ${data.playersCount} players across ${data.tribesCount} tribes (Episode ${data.episodeNumber})`,
+          text: `Updated ${data.playersCount} players across ${data.tribesCount} tribes (Episode ${data.episodeNumber})${data.episodesUpserted ? ` · ${data.episodesUpserted} episodes upserted` : ""}`,
         });
         router.refresh();
       } else {
@@ -203,7 +211,7 @@ export default function AdminPanel({
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Admin Panel ⚙️</h1>
-        <p className="text-zinc-500 mt-1">Manage episodes, questions, and scoring.</p>
+        <p className="text-zinc-600 mt-1">Manage episodes, questions, and scoring.</p>
       </div>
 
       {/* Tabs */}
@@ -230,7 +238,7 @@ export default function AdminPanel({
             <h2 className="text-sm font-semibold text-zinc-700 mb-4">Create Episode</h2>
             <form onSubmit={createEpisode} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
                   Episode Number
                 </label>
                 <input
@@ -240,18 +248,18 @@ export default function AdminPanel({
                   value={epNumber}
                   onChange={(e) => setEpNumber(e.target.value)}
                   placeholder="e.g. 1"
-                  className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">
+                <label className="block text-xs font-medium text-zinc-700 mb-1">
                   Air Date
                 </label>
                 <input
                   type="date"
                   value={epDate}
                   onChange={(e) => setEpDate(e.target.value)}
-                  className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                  className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                 />
               </div>
               <button
@@ -268,7 +276,7 @@ export default function AdminPanel({
           {episodes.length > 0 && (
             <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
               <div className="px-5 py-3 bg-zinc-50 border-b border-black/5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
                   All Episodes
                 </p>
               </div>
@@ -276,8 +284,8 @@ export default function AdminPanel({
                 <tbody>
                   {episodes.map((ep) => (
                     <tr key={ep.id} className="border-b border-black/5 last:border-0">
-                      <td className="px-5 py-3 font-medium">Episode {ep.episode_number}</td>
-                      <td className="px-5 py-3 text-zinc-500 text-right">
+                      <td className="px-5 py-3 font-medium text-zinc-800">Episode {ep.episode_number}</td>
+                      <td className="px-5 py-3 text-zinc-700 text-right">
                         {ep.air_date
                           ? new Date(ep.air_date).toLocaleDateString("en-US", {
                               month: "short",
@@ -302,16 +310,16 @@ export default function AdminPanel({
             <h2 className="text-sm font-semibold text-zinc-700 mb-4">Create Question</h2>
 
             {episodes.length === 0 ? (
-              <p className="text-sm text-zinc-400">Create an episode first.</p>
+              <p className="text-sm text-zinc-600">Create an episode first.</p>
             ) : (
               <form onSubmit={createQuestion} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Episode</label>
+                  <label className="block text-xs font-medium text-zinc-700 mb-1">Episode</label>
                   <select
                     value={qEpisodeId}
                     onChange={(e) => setQEpisodeId(e.target.value)}
                     required
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                   >
                     {episodes.map((ep) => (
                       <option key={ep.id} value={ep.id}>
@@ -321,7 +329,7 @@ export default function AdminPanel({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">
+                  <label className="block text-xs font-medium text-zinc-700 mb-1">
                     Question Text
                   </label>
                   <textarea
@@ -330,12 +338,12 @@ export default function AdminPanel({
                     required
                     rows={3}
                     placeholder="Who will be voted out this episode?"
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200 resize-none"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200 resize-none"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
                       Point Value
                     </label>
                     <input
@@ -344,11 +352,11 @@ export default function AdminPanel({
                       required
                       value={qPoints}
                       onChange={(e) => setQPoints(e.target.value)}
-                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-500 mb-1">
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
                       Lock Time
                     </label>
                     <input
@@ -356,10 +364,40 @@ export default function AdminPanel({
                       required
                       value={qLockTime}
                       onChange={(e) => setQLockTime(e.target.value)}
-                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700 mb-1">
+                    Answer Type
+                  </label>
+                  <select
+                    value={qAnswerType}
+                    onChange={(e) => setQAnswerType(e.target.value as "free" | "player" | "tribe")}
+                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                  >
+                    <option value="free">Free answer</option>
+                    <option value="player">Player pick</option>
+                    <option value="tribe">Tribe pick</option>
+                  </select>
+                </div>
+                {qAnswerType === "player" && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700 mb-1">
+                      Num Players to Pick
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="24"
+                      required
+                      value={qNumPlayers}
+                      onChange={(e) => setQNumPlayers(e.target.value)}
+                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
+                    />
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={qLoading}
@@ -375,7 +413,7 @@ export default function AdminPanel({
           {questions.length > 0 && (
             <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
               <div className="px-5 py-3 bg-zinc-50 border-b border-black/5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
                   All Questions
                 </p>
               </div>
@@ -387,7 +425,7 @@ export default function AdminPanel({
                         <p className="text-sm font-medium text-zinc-800 truncate">
                           {q.question_text}
                         </p>
-                        <p className="text-xs text-zinc-400 mt-0.5">
+                        <p className="text-xs text-zinc-600 mt-0.5">
                           Ep. {q.episodes?.episode_number ?? "?"} ·{" "}
                           {q.point_value} pt{q.point_value !== 1 ? "s" : ""} ·{" "}
                           Locks {new Date(q.lock_time).toLocaleDateString()}
@@ -412,7 +450,7 @@ export default function AdminPanel({
         <div className="space-y-6">
           <div className="rounded-xl border border-black/10 bg-white p-5">
             <h2 className="text-sm font-semibold text-zinc-700 mb-1">Season State</h2>
-            <p className="text-xs text-zinc-400 mb-4">
+            <p className="text-xs text-zinc-600 mb-4">
               Fetch current tribe membership from Wikipedia.
             </p>
             <button
@@ -433,16 +471,16 @@ export default function AdminPanel({
         <div className="space-y-6">
           <div className="rounded-xl border border-black/10 bg-white p-5">
             <h2 className="text-sm font-semibold text-zinc-700 mb-1">Score a Question</h2>
-            <p className="text-xs text-zinc-400 mb-4">
+            <p className="text-xs text-zinc-600 mb-4">
               Set the correct answer and trigger scoring for all predictions.
             </p>
 
             {questions.length === 0 ? (
-              <p className="text-sm text-zinc-400">No questions yet.</p>
+              <p className="text-sm text-zinc-600">No questions yet.</p>
             ) : (
               <form onSubmit={handleScoring} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Question</label>
+                  <label className="block text-xs font-medium text-zinc-700 mb-1">Question</label>
                   <select
                     value={scoreQId}
                     onChange={(e) => {
@@ -450,7 +488,7 @@ export default function AdminPanel({
                       const q = questions.find((q) => q.id === parseInt(e.target.value));
                       setCorrectAnswer(q?.correct_answer ?? "");
                     }}
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                   >
                     {questions.map((q) => (
                       <option key={q.id} value={q.id}>
@@ -461,7 +499,7 @@ export default function AdminPanel({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">
+                  <label className="block text-xs font-medium text-zinc-700 mb-1">
                     Correct Answer
                   </label>
                   <input
@@ -470,7 +508,7 @@ export default function AdminPanel({
                     value={correctAnswer}
                     onChange={(e) => setCorrectAnswer(e.target.value)}
                     placeholder="e.g. Sandra"
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                   />
                 </div>
 
@@ -479,11 +517,11 @@ export default function AdminPanel({
                   <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Quick fill</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Player</label>
+                      <label className="block text-xs text-zinc-700 mb-1">Player</label>
                       <select
                         value=""
                         onChange={(e) => { if (e.target.value) setCorrectAnswer(e.target.value); }}
-                        className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                        className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                       >
                         <option value="">— pick player —</option>
                         {SEASON_50_PLAYERS.map((p) => (
@@ -492,11 +530,11 @@ export default function AdminPanel({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Tribe</label>
+                      <label className="block text-xs text-zinc-700 mb-1">Tribe</label>
                       <select
                         value=""
                         onChange={(e) => { if (e.target.value) setCorrectAnswer(e.target.value); }}
-                        className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                        className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                       >
                         <option value="">— pick tribe —</option>
                         {tribeNames.map((name) => (
@@ -522,7 +560,7 @@ export default function AdminPanel({
           {questions.filter((q) => q.correct_answer).length > 0 && (
             <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
               <div className="px-5 py-3 bg-zinc-50 border-b border-black/5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
                   Scored Questions
                 </p>
               </div>
@@ -535,12 +573,12 @@ export default function AdminPanel({
                         <p className="text-sm font-medium text-zinc-800 truncate">
                           {q.question_text}
                         </p>
-                        <p className="text-xs text-zinc-400 mt-0.5">
+                        <p className="text-xs text-zinc-600 mt-0.5">
                           Ep. {q.episodes?.episode_number ?? "?"}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs text-zinc-400">Answer</p>
+                        <p className="text-xs text-zinc-600">Answer</p>
                         <p className="text-sm font-semibold text-green-700">{q.correct_answer}</p>
                       </div>
                     </div>
