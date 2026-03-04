@@ -23,9 +23,54 @@ type Question = {
   episodes: { episode_number: number } | null;
 };
 
-type Tab = "episodes" | "questions" | "scoring" | "season";
+type Tab = "questions" | "scoring" | "season" | "users";
+
+type Profile = {
+  id: string;
+  name: string | null;
+  username: string;
+};
+
+type EpisodePrediction = {
+  id: number;
+  predicted_answer: string;
+  points_awarded: number | null;
+  questions: {
+    question_text: string;
+    point_value: number;
+    correct_answer: string | null;
+    episodes: { episode_number: number } | null;
+  } | null;
+};
+
+type SeasonPrediction = {
+  milestone: string;
+  player_names: string;
+};
 
 type Message = { type: "success" | "error"; text: string };
+
+/** Interprets a datetime-local string as America/New_York time and returns a UTC ISO string. */
+function datetimeLocalToETISO(val: string): string {
+  const year = parseInt(val.slice(0, 4));
+  const month = parseInt(val.slice(5, 7));
+  const day = parseInt(val.slice(8, 10));
+  const hour = parseInt(val.slice(11, 13));
+  const minute = val.length >= 16 ? parseInt(val.slice(14, 16)) : 0;
+  // Use a temp UTC date to detect whether DST is active for this date/time in ET
+  const approxUTC = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const etHour =
+    parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "2-digit",
+        hour12: false,
+      }).format(approxUTC)
+    ) % 24;
+  let offsetHours = hour - etHour;
+  if (offsetHours < 0) offsetHours += 24;
+  return new Date(Date.UTC(year, month - 1, day, hour + offsetHours, minute)).toISOString();
+}
 
 function StatusMessage({ msg }: { msg: Message | null }) {
   if (!msg) return null;
@@ -50,42 +95,25 @@ export default function AdminPanel({
   questions: Question[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("episodes");
-
-  // ── Episode form ──────────────────────────────────────
-  const [epNumber, setEpNumber] = useState("");
-  const [epDate, setEpDate] = useState("");
-  const [epLoading, setEpLoading] = useState(false);
-  const [epMsg, setEpMsg] = useState<Message | null>(null);
-
-  async function createEpisode(e: React.FormEvent) {
-    e.preventDefault();
-    setEpLoading(true);
-    setEpMsg(null);
-    const { error } = await supabase.from("episodes").insert({
-      episode_number: parseInt(epNumber),
-      air_date: epDate || null,
-    });
-    setEpLoading(false);
-    if (error) {
-      setEpMsg({ type: "error", text: error.message });
-    } else {
-      setEpMsg({ type: "success", text: `Episode ${epNumber} created!` });
-      setEpNumber("");
-      setEpDate("");
-      router.refresh();
-    }
-  }
+  const [tab, setTab] = useState<Tab>("questions");
 
   // ── Question form ─────────────────────────────────────
   const [qEpisodeId, setQEpisodeId] = useState(episodes[0]?.id?.toString() ?? "");
   const [qText, setQText] = useState("");
   const [qPoints, setQPoints] = useState("1");
-  const [qLockTime, setQLockTime] = useState("");
+  const [qLockTime, setQLockTime] = useState(() => {
+    const airDate = episodes[0]?.air_date;
+    return airDate ? `${airDate}T20:00` : "";
+  });
   const [qAnswerType, setQAnswerType] = useState<"free" | "player" | "tribe">("free");
   const [qNumPlayers, setQNumPlayers] = useState("1");
   const [qLoading, setQLoading] = useState(false);
   const [qMsg, setQMsg] = useState<Message | null>(null);
+
+  useEffect(() => {
+    const ep = episodes.find((e) => e.id.toString() === qEpisodeId);
+    if (ep?.air_date) setQLockTime(`${ep.air_date}T20:00`);
+  }, [qEpisodeId]);
 
   async function createQuestion(e: React.FormEvent) {
     e.preventDefault();
@@ -99,7 +127,7 @@ export default function AdminPanel({
       episode_id: parseInt(qEpisodeId),
       question_text: qText.trim(),
       point_value: parseInt(qPoints),
-      lock_time: qLockTime,
+      lock_time: datetimeLocalToETISO(qLockTime),
       answer_type: qAnswerType,
       num_players: qAnswerType === "player" ? parseInt(qNumPlayers) : 1,
     });
@@ -200,11 +228,56 @@ export default function AdminPanel({
     }
   }
 
+  // ── Users / predictions tab ───────────────────────────
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [userEpPredictions, setUserEpPredictions] = useState<EpisodePrediction[]>([]);
+  const [userSeasonPredictions, setUserSeasonPredictions] = useState<SeasonPrediction[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "users") return;
+    supabase
+      .from("profiles")
+      .select("id, name, username")
+      .order("name", { ascending: true })
+      .then(({ data }) => {
+        setProfiles(data ?? []);
+        if (data?.length) setSelectedUserId(data[0].id);
+      });
+  }, [tab]);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    setUsersLoading(true);
+    Promise.all([
+      supabase
+        .from("predictions")
+        .select("id, predicted_answer, points_awarded, questions(question_text, point_value, correct_answer, episodes(episode_number))")
+        .eq("user_id", selectedUserId)
+        .order("id", { ascending: true }),
+      supabase
+        .from("season_predictions")
+        .select("milestone, player_names")
+        .eq("user_id", selectedUserId)
+        .order("milestone", { ascending: true }),
+    ]).then(([{ data: epData }, { data: seasonData }]) => {
+      setUserEpPredictions(
+        (epData ?? []).map((r) => ({
+          ...r,
+          questions: Array.isArray(r.questions) ? (r.questions[0] ?? null) : r.questions,
+        })) as unknown as EpisodePrediction[]
+      );
+      setUserSeasonPredictions(seasonData ?? []);
+      setUsersLoading(false);
+    });
+  }, [selectedUserId]);
+
   const tabs: { id: Tab; label: string }[] = [
-    { id: "episodes", label: "Episodes" },
     { id: "questions", label: "Questions" },
     { id: "scoring", label: "Scoring" },
     { id: "season", label: "Season" },
+    { id: "users", label: "Users" },
   ];
 
   return (
@@ -220,7 +293,7 @@ export default function AdminPanel({
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 rounded-lg py-2 text-xs sm:text-sm font-medium transition-colors ${
               tab === t.id
                 ? "bg-white text-zinc-900 shadow-sm"
                 : "text-zinc-600 hover:text-zinc-800"
@@ -230,78 +303,6 @@ export default function AdminPanel({
           </button>
         ))}
       </div>
-
-      {/* ── Episodes Tab ── */}
-      {tab === "episodes" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-black/10 bg-white p-5">
-            <h2 className="text-sm font-semibold text-zinc-700 mb-4">Create Episode</h2>
-            <form onSubmit={createEpisode} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1">
-                  Episode Number
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={epNumber}
-                  onChange={(e) => setEpNumber(e.target.value)}
-                  placeholder="e.g. 1"
-                  className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1">
-                  Air Date
-                </label>
-                <input
-                  type="date"
-                  value={epDate}
-                  onChange={(e) => setEpDate(e.target.value)}
-                  className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={epLoading}
-                className="w-full rounded-full bg-orange-600 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
-              >
-                {epLoading ? "Creating..." : "Create Episode"}
-              </button>
-            </form>
-            <StatusMessage msg={epMsg} />
-          </div>
-
-          {episodes.length > 0 && (
-            <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
-              <div className="px-5 py-3 bg-zinc-50 border-b border-black/5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
-                  All Episodes
-                </p>
-              </div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {episodes.map((ep) => (
-                    <tr key={ep.id} className="border-b border-black/5 last:border-0">
-                      <td className="px-5 py-3 font-medium text-zinc-800">Episode {ep.episode_number}</td>
-                      <td className="px-5 py-3 text-zinc-700 text-right">
-                        {ep.air_date
-                          ? new Date(ep.air_date).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── Questions Tab ── */}
       {tab === "questions" && (
@@ -319,7 +320,7 @@ export default function AdminPanel({
                     value={qEpisodeId}
                     onChange={(e) => setQEpisodeId(e.target.value)}
                     required
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                   >
                     {episodes.map((ep) => (
                       <option key={ep.id} value={ep.id}>
@@ -341,7 +342,7 @@ export default function AdminPanel({
                     className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200 resize-none"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-zinc-700 mb-1">
                       Point Value
@@ -352,7 +353,7 @@ export default function AdminPanel({
                       required
                       value={qPoints}
                       onChange={(e) => setQPoints(e.target.value)}
-                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                     />
                   </div>
                   <div>
@@ -364,7 +365,7 @@ export default function AdminPanel({
                       required
                       value={qLockTime}
                       onChange={(e) => setQLockTime(e.target.value)}
-                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                     />
                   </div>
                 </div>
@@ -375,7 +376,7 @@ export default function AdminPanel({
                   <select
                     value={qAnswerType}
                     onChange={(e) => setQAnswerType(e.target.value as "free" | "player" | "tribe")}
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                   >
                     <option value="free">Free answer</option>
                     <option value="player">Player pick</option>
@@ -394,14 +395,14 @@ export default function AdminPanel({
                       required
                       value={qNumPlayers}
                       onChange={(e) => setQNumPlayers(e.target.value)}
-                      className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
+                      className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                     />
                   </div>
                 )}
                 <button
                   type="submit"
                   disabled={qLoading}
-                  className="w-full rounded-full bg-orange-600 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                  className="w-full rounded-full bg-orange-600 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
                 >
                   {qLoading ? "Creating..." : "Create Question"}
                 </button>
@@ -445,6 +446,101 @@ export default function AdminPanel({
         </div>
       )}
 
+      {/* ── Users Tab ── */}
+      {tab === "users" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-black/10 bg-white p-5">
+            <h2 className="text-sm font-semibold text-zinc-700 mb-4">View User Predictions</h2>
+            {profiles.length === 0 ? (
+              <p className="text-sm text-zinc-600">No users found.</p>
+            ) : (
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+              >
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name ?? p.username} — {p.username}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {selectedUserId && !usersLoading && (
+            <>
+              {/* Season predictions */}
+              <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
+                <div className="px-5 py-3 bg-zinc-50 border-b border-black/5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                    Season Predictions
+                  </p>
+                </div>
+                {userSeasonPredictions.length === 0 ? (
+                  <p className="px-5 py-4 text-sm text-zinc-500">No season predictions.</p>
+                ) : (
+                  <div className="divide-y divide-black/5">
+                    {userSeasonPredictions.map((sp) => (
+                      <div key={sp.milestone} className="px-5 py-3 flex items-start justify-between gap-3">
+                        <p className="text-sm text-zinc-700 font-medium">{sp.milestone}</p>
+                        <p className="text-sm text-zinc-900 text-right">{sp.player_names || "—"}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Episode predictions */}
+              <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
+                <div className="px-5 py-3 bg-zinc-50 border-b border-black/5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                    Episode Predictions
+                  </p>
+                </div>
+                {userEpPredictions.length === 0 ? (
+                  <p className="px-5 py-4 text-sm text-zinc-500">No episode predictions.</p>
+                ) : (
+                  <div className="divide-y divide-black/5">
+                    {userEpPredictions.map((pred) => (
+                      <div key={pred.id} className="px-5 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-zinc-500 mb-0.5">
+                              Ep. {pred.questions?.episodes?.episode_number ?? "?"} ·{" "}
+                              {pred.questions?.point_value ?? "?"} pt
+                              {pred.questions?.correct_answer && (
+                                <span className={`ml-2 font-semibold ${
+                                  pred.points_awarded && pred.points_awarded > 0
+                                    ? "text-green-600"
+                                    : "text-red-500"
+                                }`}>
+                                  {pred.points_awarded && pred.points_awarded > 0 ? "✓" : "✗"}
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-sm text-zinc-700 truncate">
+                              {pred.questions?.question_text ?? "Unknown question"}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-zinc-900 shrink-0">
+                            {pred.predicted_answer}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {usersLoading && (
+            <p className="text-sm text-zinc-500 text-center py-4">Loading...</p>
+          )}
+        </div>
+      )}
+
       {/* ── Season Tab ── */}
       {tab === "season" && (
         <div className="space-y-6">
@@ -457,7 +553,7 @@ export default function AdminPanel({
               type="button"
               onClick={handleRefetchSeason}
               disabled={seasonLoading}
-              className="w-full rounded-full bg-survivor-green py-2 text-sm font-semibold text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
+              className="w-full rounded-full bg-survivor-green py-3 text-sm font-semibold text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
             >
               {seasonLoading ? "Fetching..." : "Refetch Season State"}
             </button>
@@ -488,7 +584,7 @@ export default function AdminPanel({
                       const q = questions.find((q) => q.id === parseInt(e.target.value));
                       setCorrectAnswer(q?.correct_answer ?? "");
                     }}
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                   >
                     {questions.map((q) => (
                       <option key={q.id} value={q.id}>
@@ -508,7 +604,7 @@ export default function AdminPanel({
                     value={correctAnswer}
                     onChange={(e) => setCorrectAnswer(e.target.value)}
                     placeholder="e.g. Sandra"
-                    className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
+                    className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                   />
                 </div>
 
@@ -548,7 +644,7 @@ export default function AdminPanel({
                 <button
                   type="submit"
                   disabled={scoreLoading}
-                  className="w-full rounded-full bg-orange-600 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                  className="w-full rounded-full bg-orange-600 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
                 >
                   {scoreLoading ? "Scoring..." : "Save Answer & Score Predictions"}
                 </button>

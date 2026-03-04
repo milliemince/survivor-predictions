@@ -30,13 +30,15 @@ export default function PredictionsForm({
   episode,
   userId,
   existingPredictions,
-  tribeNames = [],
+  tribeOptions = [],
+  eliminatedNames = [],
   isMock = false,
 }: {
   episode: Episode;
   userId: string;
   existingPredictions: Record<number, string>;
-  tribeNames?: string[];
+  tribeOptions?: { name: string; players: string[] }[];
+  eliminatedNames?: string[];
   isMock?: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<number, string>>(existingPredictions);
@@ -205,6 +207,7 @@ export default function PredictionsForm({
                       selected={getSelectedPlayerIds(question.id)}
                       onChange={(playerIds) => handlePlayerSelect(question.id, playerIds)}
                       maxSelections={question.num_players}
+                      eliminatedNames={eliminatedNames}
                     />
                   ) : isTribeQuestion ? (
                     // Tribe dropdown
@@ -216,9 +219,9 @@ export default function PredictionsForm({
                       className="w-full rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment outline-none focus:ring-2 focus:ring-survivor-green/30 transition-shadow"
                     >
                       <option value="">— pick a tribe —</option>
-                      {tribeNames.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
+                      {tribeOptions.map((t) => (
+                        <option key={t.name} value={t.name}>
+                          {t.name}: {t.players.join(", ")}
                         </option>
                       ))}
                     </select>

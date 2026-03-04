@@ -40,7 +40,7 @@ export default function LoginPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2.5 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -50,14 +50,14 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2.5 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
             />
           </div>
           {error && <p className="text-sm text-tribal-red">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="rounded-full bg-survivor-green py-2 text-sm font-medium text-white hover:bg-survivor-green-dark disabled:opacity-50 mt-2 transition-colors"
+            className="rounded-full bg-survivor-green py-3 text-sm font-medium text-white hover:bg-survivor-green-dark disabled:opacity-50 mt-2 transition-colors"
           >
             {loading ? "Logging in..." : "Log In"}
           </button>

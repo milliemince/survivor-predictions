@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 export default function SignupPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +18,11 @@ export default function SignupPage() {
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
 
     if (error) {
       setError(error.message);
@@ -34,13 +39,24 @@ export default function SignupPage() {
         <h1 className="mb-6 font-display text-2xl uppercase tracking-wide text-parchment">Create Account</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-parchment/60">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+              placeholder="Display name for public leaderboard"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2.5 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-parchment/60">Email</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2.5 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -51,14 +67,14 @@ export default function SignupPage() {
               onChange={e => setPassword(e.target.value)}
               required
               minLength={6}
-              className="rounded-lg border border-white/10 bg-earth px-3 py-2 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
+              className="rounded-lg border border-white/10 bg-earth px-3 py-2.5 text-sm text-parchment placeholder:text-parchment/30 outline-none focus:ring-2 focus:ring-survivor-green/50"
             />
           </div>
           {error && <p className="text-sm text-tribal-red">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 rounded-full bg-survivor-green py-2 text-sm font-medium text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
+            className="mt-2 rounded-full bg-survivor-green py-3 text-sm font-medium text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
           >
             {loading ? "Creating account..." : "Sign Up"}
           </button>

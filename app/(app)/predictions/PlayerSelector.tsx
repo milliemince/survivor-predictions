@@ -46,12 +46,15 @@ export default function PlayerSelector({
   onChange,
   disabled = false,
   maxSelections = 1,
+  eliminatedNames = [],
 }: {
   selected: string[];
   onChange: (playerIds: string[]) => void;
   disabled?: boolean;
   maxSelections?: number;
+  eliminatedNames?: string[];
 }) {
+  const activePlayers = SEASON_50_PLAYERS.filter((p) => !eliminatedNames.includes(p.name));
   const selectionCount = selected.length;
   const atMax = selectionCount >= maxSelections;
 
@@ -62,8 +65,8 @@ export default function PlayerSelector({
           {selectionCount} / {maxSelections} selected
         </p>
       )}
-      <div className="grid grid-cols-6 gap-x-2 gap-y-6">
-        {SEASON_50_PLAYERS.map((player) => {
+      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-x-2 gap-y-6">
+        {activePlayers.map((player) => {
           const isSelected = selected.includes(player.id);
           const isDisabledByMax = !isSelected && atMax;
 

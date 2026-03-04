@@ -118,7 +118,7 @@ export default async function DashboardPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="font-display text-3xl uppercase tracking-wide text-parchment">
+        <h1 className="font-display text-2xl md:text-3xl uppercase tracking-wide text-parchment">
           Welcome back, {username} 👋
         </h1>
         <p className="text-parchment/50 mt-1">Ready to outwit, outplay, and outlast?</p>
@@ -148,7 +148,7 @@ export default async function DashboardPage() {
       {/* Current Episode */}
       {latestEpisode ? (
         <div className="rounded-xl border border-white/10 bg-earth-surface p-5 mb-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-parchment/40 mb-1">
                 Current Episode

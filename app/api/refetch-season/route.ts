@@ -3,6 +3,24 @@ import * as cheerio from "cheerio";
 import { createClient } from "@/lib/supabaseServer";
 
 const WIKI_PAGE = "Survivor_50:_In_the_Hands_of_the_Fans";
+
+/** Returns the UTC ISO string for 8 PM Eastern Time on the given air date. */
+function etAirTimeToUTC(airDate: string): string {
+  const year = parseInt(airDate.slice(0, 4));
+  const month = parseInt(airDate.slice(5, 7));
+  const day = parseInt(airDate.slice(8, 10));
+  const approxUTC = new Date(Date.UTC(year, month - 1, day, 20, 0));
+  const etHour =
+    parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "2-digit",
+        hour12: false,
+      }).format(approxUTC)
+    ) % 24;
+  const offsetHours = (20 - etHour + 24) % 24;
+  return new Date(Date.UTC(year, month - 1, day, 20 + offsetHours, 0)).toISOString();
+}
 const SEASON = 50;
 const CONTESTANTS_SECTION = 5;
 const SEASON_SUMMARY_SECTION = 6;
@@ -240,6 +258,30 @@ export async function POST() {
         console.error("[episodes upsert error]", epErr.message);
       } else {
         episodesUpserted = parsedEpisodes.length;
+      }
+
+      // Auto-set lock_time on questions for future episodes (8 PM ET = T20:00:00)
+      const todayStr = new Date().toISOString().split("T")[0];
+      const futureEps = parsedEpisodes.filter((e) => e.airDate && e.airDate >= todayStr);
+      if (futureEps.length > 0) {
+        const { data: futureEpRows } = await supabase
+          .from("episodes")
+          .select("id, episode_number")
+          .in("episode_number", futureEps.map((e) => e.number));
+
+        if (futureEpRows?.length) {
+          await Promise.all(
+            futureEpRows.map((epRow) => {
+              const ep = futureEps.find((e) => e.number === epRow.episode_number);
+              if (!ep?.airDate) return Promise.resolve();
+              return supabase
+                .from("questions")
+                .update({ lock_time: etAirTimeToUTC(ep.airDate) })
+                .eq("episode_id", epRow.id);
+            })
+          );
+          console.log(`[lock times] updated questions for ${futureEpRows.length} future episodes`);
+        }
       }
     }
 

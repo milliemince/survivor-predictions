@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 type LeaderboardRow = {
   user_id: string;
-  username: string;
+  name: string;
   total_points: number;
   rank: number;
 };
@@ -45,6 +45,7 @@ export default async function LeaderboardPage() {
 
       {rows && rows.length > 0 && (
         <div className="rounded-xl border border-white/10 bg-earth-surface overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-earth text-left">
@@ -79,7 +80,7 @@ export default async function LeaderboardPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 font-medium text-parchment">
-                      {row.username}
+                      {row.name}
                       {isCurrentUser && (
                         <span className="ml-2 rounded-full bg-survivor-green/20 px-2 py-0.5 text-xs font-semibold text-survivor-green">
                           you
@@ -94,6 +95,7 @@ export default async function LeaderboardPage() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

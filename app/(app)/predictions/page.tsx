@@ -37,26 +37,46 @@ export default async function PredictionsPage() {
 
   if (!user) redirect("/login");
 
-  const [{ data: episodes }, { data: tribeStateRows }, { data: seasonPredRows }] =
+  const [{ data: episodes }, { data: tribeStateRows }, { data: eliminatedRows }, { data: seasonPredRows }] =
     await Promise.all([
+      // Fetch recent episodes; we'll pick the earliest one with open questions below
       supabase
         .from("episodes")
         .select("id, episode_number, air_date, questions(id, question_text, point_value, lock_time, answer_type, num_players)")
         .order("episode_number", { ascending: false })
-        .limit(1),
+        .limit(3),
       supabase
         .from("tribe_states")
-        .select("tribe_name")
+        .select("tribe_name, player_name")
         .eq("season", 50)
         .eq("is_eliminated", false),
+      supabase
+        .from("tribe_states")
+        .select("player_name")
+        .eq("season", 50)
+        .eq("is_eliminated", true),
       supabase
         .from("season_predictions")
         .select("milestone, player_names")
         .eq("user_id", user.id),
     ]);
 
-  const episode: Episode | null = episodes?.[0] ?? null;
-  const tribeNames: string[] = [...new Set((tribeStateRows ?? []).map((r) => r.tribe_name))];
+  // Show the earliest episode with at least one open question; fall back to latest
+  const nowIso = new Date().toISOString();
+  const episode: Episode | null =
+    [...(episodes ?? [])]
+      .reverse()
+      .find((ep) => ep.questions.some((q) => q.lock_time > nowIso)) ??
+    episodes?.[0] ??
+    null;
+  const tribeMap = new Map<string, string[]>();
+  for (const row of tribeStateRows ?? []) {
+    const players = tribeMap.get(row.tribe_name) ?? [];
+    players.push(row.player_name);
+    tribeMap.set(row.tribe_name, players);
+  }
+  const tribeOptions = Array.from(tribeMap.entries()).map(([name, players]) => ({ name, players }));
+  const eliminatedNames: string[] = [...new Set((eliminatedRows ?? []).map((r) => r.player_name))];
   const existingSeasonPredictions: Record<string, string> = Object.fromEntries(
     (seasonPredRows ?? []).map((r) => [r.milestone, r.player_names])
   );
@@ -111,7 +131,8 @@ export default async function PredictionsPage() {
         userId={user.id}
         existingPredictions={existingPredictions}
         existingSeasonPredictions={existingSeasonPredictions}
-        tribeNames={tribeNames}
+        tribeOptions={tribeOptions}
+        eliminatedNames={eliminatedNames}
         isMock={episode !== null && episode.questions.length === 0}
       />
     </div>

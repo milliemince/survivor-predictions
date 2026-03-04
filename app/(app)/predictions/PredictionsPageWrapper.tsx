@@ -26,14 +26,16 @@ export default function PredictionsPageWrapper({
   userId,
   existingPredictions,
   existingSeasonPredictions,
-  tribeNames,
+  tribeOptions,
+  eliminatedNames,
   isMock,
 }: {
   episode: Episode | null;
   userId: string;
   existingPredictions: Record<number, string>;
   existingSeasonPredictions: Record<string, string>;
-  tribeNames: string[];
+  tribeOptions: { name: string; players: string[] }[];
+  eliminatedNames: string[];
   isMock: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("episode");
@@ -44,7 +46,7 @@ export default function PredictionsPageWrapper({
       <div className="flex gap-1 rounded-xl bg-earth p-1 mb-6 border border-white/10">
         <button
           onClick={() => setTab("episode")}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
             tab === "episode"
               ? "bg-earth-surface text-parchment shadow-sm"
               : "text-parchment/40 hover:text-parchment/70"
@@ -54,7 +56,7 @@ export default function PredictionsPageWrapper({
         </button>
         <button
           onClick={() => setTab("season")}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
             tab === "season"
               ? "bg-earth-surface text-parchment shadow-sm"
               : "text-parchment/40 hover:text-parchment/70"
@@ -75,7 +77,8 @@ export default function PredictionsPageWrapper({
               episode={episode}
               userId={userId}
               existingPredictions={existingPredictions}
-              tribeNames={tribeNames}
+              tribeOptions={tribeOptions}
+              eliminatedNames={eliminatedNames}
               isMock={isMock}
             />
           )}
@@ -86,6 +89,7 @@ export default function PredictionsPageWrapper({
         <SeasonPredictionsForm
           userId={userId}
           existingPredictions={existingSeasonPredictions}
+          eliminatedNames={eliminatedNames}
         />
       )}
     </div>

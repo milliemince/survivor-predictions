@@ -37,9 +37,11 @@ function idsToNames(ids: string[]): string {
 export default function SeasonPredictionsForm({
   userId,
   existingPredictions,
+  eliminatedNames = [],
 }: {
   userId: string;
   existingPredictions: Record<string, string>; // milestone → comma-separated names
+  eliminatedNames?: string[];
 }) {
   // selectedIds: milestone → array of player IDs
   const [selectedIds, setSelectedIds] = useState<Record<MilestoneKey, string[]>>(
@@ -95,7 +97,7 @@ export default function SeasonPredictionsForm({
             className="rounded-xl border border-white/10 bg-earth-surface overflow-hidden"
           >
             {/* Card header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+            <div className="flex flex-wrap items-start gap-2 px-4 py-3 sm:px-5 sm:py-4 border-b border-white/10">
               <div>
                 <h3 className="text-base font-bold text-parchment">{milestone.label}</h3>
                 <p className="text-xs text-parchment/50 mt-0.5">{milestone.description}</p>
@@ -112,11 +114,12 @@ export default function SeasonPredictionsForm({
             </div>
 
             {/* Player selector */}
-            <div className="p-5">
+            <div className="p-3 sm:p-5">
               <PlayerSelector
                 selected={selected}
                 onChange={(ids) => handleChange(milestone.key, ids)}
                 maxSelections={needed}
+                eliminatedNames={eliminatedNames}
               />
             </div>
           </div>
