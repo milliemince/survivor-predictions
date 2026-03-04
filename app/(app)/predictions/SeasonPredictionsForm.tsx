@@ -3,16 +3,13 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PlayerSelector from "./PlayerSelector";
-import { SEASON_50_PLAYERS } from "./players";
+import { SEASON_50_PLAYERS, type Player } from "./players";
 
 const MILESTONES = [
-  { key: "top_16", label: "Top 16", description: "Which 16 players survive the first votes?", count: 16 },
-  { key: "top_12", label: "Top 12", description: "Pick who makes the merge.", count: 12 },
-  { key: "top_9", label: "Top 9", description: "Who survives to the final 9?", count: 9 },
-  { key: "top_7", label: "Top 7", description: "Who makes it to the final 7?", count: 7 },
-  { key: "top_5", label: "Top 5", description: "Pick your final 5.", count: 5 },
-  { key: "final_tribal", label: "Final Tribal", description: "Who sits at Final Tribal Council?", count: 3 },
-  { key: "sole_survivor", label: "Sole Survivor", description: "Who wins Survivor 50?", count: 1 },
+  { key: "merge", label: "Merge", description: "Pick the 12 players who make the merge.", count: 12 },
+  { key: "top_7", label: "Top 7", description: "Of your merge picks, who makes it to the final 7?", count: 7 },
+  { key: "final_tribal", label: "Final Tribal", description: "Of your top 7, who sits at Final Tribal Council?", count: 3 },
+  { key: "sole_survivor", label: "Sole Survivor", description: "Of your finalists, who wins Survivor 50?", count: 1 },
 ] as const;
 
 type MilestoneKey = (typeof MILESTONES)[number]["key"];
@@ -54,8 +51,31 @@ export default function SeasonPredictionsForm({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  // Cascade: when a milestone changes, drop any downstream selections no longer in the new pool
   function handleChange(key: MilestoneKey, ids: string[]) {
-    setSelectedIds((prev) => ({ ...prev, [key]: ids }));
+    setSelectedIds((prev) => {
+      const next = { ...prev, [key]: ids };
+      if (key === "merge") {
+        next.top_7 = next.top_7.filter((id) => ids.includes(id));
+        next.final_tribal = next.final_tribal.filter((id) => next.top_7.includes(id));
+        next.sole_survivor = next.sole_survivor.filter((id) => next.final_tribal.includes(id));
+      } else if (key === "top_7") {
+        next.final_tribal = next.final_tribal.filter((id) => ids.includes(id));
+        next.sole_survivor = next.sole_survivor.filter((id) => next.final_tribal.includes(id));
+      } else if (key === "final_tribal") {
+        next.sole_survivor = next.sole_survivor.filter((id) => ids.includes(id));
+      }
+      return next;
+    });
+  }
+
+  // Derive the available player pool for each milestone from the parent milestone's selections
+  function poolForMilestone(key: MilestoneKey): Player[] {
+    if (key === "merge") return SEASON_50_PLAYERS;
+    if (key === "top_7") return SEASON_50_PLAYERS.filter((p) => selectedIds.merge.includes(p.id));
+    if (key === "final_tribal") return SEASON_50_PLAYERS.filter((p) => selectedIds.top_7.includes(p.id));
+    if (key === "sole_survivor") return SEASON_50_PLAYERS.filter((p) => selectedIds.final_tribal.includes(p.id));
+    return SEASON_50_PLAYERS;
   }
 
   async function handleSave() {
@@ -115,12 +135,19 @@ export default function SeasonPredictionsForm({
 
             {/* Player selector */}
             <div className="p-3 sm:p-5">
-              <PlayerSelector
-                selected={selected}
-                onChange={(ids) => handleChange(milestone.key, ids)}
-                maxSelections={needed}
-                eliminatedNames={eliminatedNames}
-              />
+              {poolForMilestone(milestone.key).length === 0 ? (
+                <p className="text-xs text-parchment/40 text-center py-4">
+                  Complete the previous milestone first.
+                </p>
+              ) : (
+                <PlayerSelector
+                  selected={selected}
+                  onChange={(ids) => handleChange(milestone.key, ids)}
+                  maxSelections={needed}
+                  eliminatedNames={eliminatedNames}
+                  availablePlayers={poolForMilestone(milestone.key)}
+                />
+              )}
             </div>
           </div>
         );

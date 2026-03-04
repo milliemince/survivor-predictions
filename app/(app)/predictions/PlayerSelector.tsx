@@ -47,14 +47,17 @@ export default function PlayerSelector({
   disabled = false,
   maxSelections = 1,
   eliminatedNames = [],
+  availablePlayers,
 }: {
   selected: string[];
   onChange: (playerIds: string[]) => void;
   disabled?: boolean;
   maxSelections?: number;
   eliminatedNames?: string[];
+  availablePlayers?: Player[];
 }) {
-  const activePlayers = SEASON_50_PLAYERS.filter((p) => !eliminatedNames.includes(p.name));
+  const pool = availablePlayers ?? SEASON_50_PLAYERS;
+  const activePlayers = pool.filter((p) => !eliminatedNames.includes(p.name));
   const selectionCount = selected.length;
   const atMax = selectionCount >= maxSelections;
 
