@@ -99,7 +99,7 @@ export default function SeasonPredictionsForm({
             {/* Card header */}
             <div className="flex flex-wrap items-start gap-2 px-4 py-3 sm:px-5 sm:py-4 border-b border-white/10">
               <div>
-                <h3 className="text-base font-bold text-parchment">{milestone.label}</h3>
+                <h3 className="font-display text-sm uppercase tracking-widest text-parchment">{milestone.label}</h3>
                 <p className="text-xs text-parchment/50 mt-0.5">{milestone.description}</p>
               </div>
               <span

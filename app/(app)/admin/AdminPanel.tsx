@@ -283,7 +283,7 @@ export default function AdminPanel({
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Admin Panel ⚙️</h1>
+        <h1 className="font-display text-2xl uppercase tracking-wide">Admin Panel</h1>
         <p className="text-zinc-600 mt-1">Manage episodes, questions, and scoring.</p>
       </div>
 

@@ -31,7 +31,7 @@ export default async function LeaderboardPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl uppercase tracking-wide text-parchment mb-6">Leaderboard 🏆</h1>
+      <h1 className="font-display text-3xl uppercase tracking-wide text-parchment mb-6">Leaderboard</h1>
 
       {error && (
         <p className="text-sm text-tribal-red mb-4">Failed to load leaderboard.</p>

@@ -9,7 +9,7 @@ export default function Home() {
           Survivor Predictions
         </h1>
         <p className="mt-4 text-parchment/60 max-w-sm mx-auto">
-          Outwit. Outplay. Outpredict. Compete with friends to call every elimination.
+          Outwit. Outplay. Outpredict.
         </p>
       </div>
       <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">

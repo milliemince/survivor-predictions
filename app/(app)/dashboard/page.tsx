@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Tv2, Clock } from "lucide-react";
 import TribeGrid, { type TribeData } from "./TribeGrid";
 
 type Question = {
@@ -47,7 +48,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const [profileResult, leaderboardResult, episodesResult, tribeResult] = await Promise.all([
-    supabase.from("profiles").select("username").eq("id", user.id).single(),
+    supabase.from("profiles").select("username, name").eq("id", user.id).single(),
     supabase.from("leaderboard").select("total_points, rank").eq("user_id", user.id).single(),
     // Next upcoming episode: earliest air_date that is today or in the future (Eastern time)
     supabase
@@ -65,7 +66,7 @@ export default async function DashboardPage() {
       .limit(200),
   ]);
 
-  const username = profileResult.data?.username ?? user.email ?? "Player";
+  const username = profileResult.data?.name ?? profileResult.data?.username ?? user.email ?? "Player";
   const totalPoints = leaderboardResult.data?.total_points ?? 0;
   const rank = leaderboardResult.data?.rank ?? null;
 
@@ -119,7 +120,7 @@ export default async function DashboardPage() {
     <div>
       <div className="mb-8">
         <h1 className="font-display text-2xl md:text-3xl uppercase tracking-wide text-parchment">
-          Welcome back, {username} 👋
+          Welcome back, {username}
         </h1>
         <p className="text-parchment/50 mt-1">Ready to outwit, outplay, and outlast?</p>
       </div>
@@ -127,13 +128,13 @@ export default async function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl border border-white/10 bg-earth-surface p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-parchment/40 mb-2">
+          <p className="font-display text-xs uppercase tracking-widest text-parchment/40 mb-2">
             Total Points
           </p>
           <p className="text-3xl font-bold text-survivor-green">{totalPoints}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-earth-surface p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-parchment/40 mb-2">
+          <p className="font-display text-xs uppercase tracking-widest text-parchment/40 mb-2">
             Your Rank
           </p>
           <p className="text-3xl font-bold text-survivor-green">
@@ -150,7 +151,7 @@ export default async function DashboardPage() {
         <div className="rounded-xl border border-white/10 bg-earth-surface p-5 mb-4">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-parchment/40 mb-1">
+              <p className="font-display text-xs uppercase tracking-widest text-parchment/40 mb-1">
                 Current Episode
               </p>
               <h2 className="text-lg font-bold text-parchment">
@@ -166,13 +167,13 @@ export default async function DashboardPage() {
                 </p>
               )}
             </div>
-            <span className="text-3xl">📺</span>
+            <Tv2 className="w-7 h-7 text-parchment/30 shrink-0" />
           </div>
 
           {nextLockDate && (
             <div className="mt-4 rounded-lg bg-survivor-green/10 border border-survivor-green/20 px-4 py-3">
-              <p className="text-sm font-semibold text-survivor-green">
-                ⏰ Predictions lock{" "}
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-survivor-green">
+                <Clock className="w-3.5 h-3.5 shrink-0" /> Predictions lock{" "}
                 {nextLockDate.toLocaleString("en-US", {
                   timeZone: "America/New_York",
                   weekday: "short",

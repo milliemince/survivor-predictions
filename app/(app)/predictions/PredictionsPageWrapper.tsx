@@ -46,7 +46,7 @@ export default function PredictionsPageWrapper({
       <div className="flex gap-1 rounded-xl bg-earth p-1 mb-6 border border-white/10">
         <button
           onClick={() => setTab("episode")}
-          className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 font-display text-xs uppercase tracking-widest transition-colors ${
             tab === "episode"
               ? "bg-earth-surface text-parchment shadow-sm"
               : "text-parchment/40 hover:text-parchment/70"
@@ -56,7 +56,7 @@ export default function PredictionsPageWrapper({
         </button>
         <button
           onClick={() => setTab("season")}
-          className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 font-display text-xs uppercase tracking-widest transition-colors ${
             tab === "season"
               ? "bg-earth-surface text-parchment shadow-sm"
               : "text-parchment/40 hover:text-parchment/70"
