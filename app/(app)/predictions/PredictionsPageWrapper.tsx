@@ -13,32 +13,76 @@ type Question = {
   lock_time: string;
   answer_type: "player" | "tribe" | "free";
   num_players: number;
+  correct_answer: string | null;
 };
 
 type Episode = {
   id: number;
   episode_number: number;
+  air_date: string | null;
   questions: Question[];
 };
 
+const MOCK_QUESTIONS: Question[] = [
+  {
+    id: -1,
+    question_text: "Who is getting eliminated tonight?",
+    point_value: 1,
+    lock_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    answer_type: "player" as const,
+    num_players: 1,
+    correct_answer: null,
+  },
+];
+
+function formatAirDate(airDate: string | null): string {
+  if (!airDate) return "";
+  const [y, mo, d] = airDate.split("-").map(Number);
+  return ` — ${new Date(y, mo - 1, d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
+}
+
 export default function PredictionsPageWrapper({
-  episode,
+  episodes,
+  initialEpisodeId,
   userId,
-  existingPredictions,
+  allPredictions,
   existingSeasonPredictions,
   tribeOptions,
   eliminatedNames,
-  isMock,
 }: {
-  episode: Episode | null;
+  episodes: Episode[];
+  initialEpisodeId: number | null;
   userId: string;
-  existingPredictions: Record<number, string>;
+  allPredictions: Record<number, string>;
   existingSeasonPredictions: Record<string, string>;
   tribeOptions: { name: string; players: string[] }[];
   eliminatedNames: string[];
-  isMock: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("episode");
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<number | null>(initialEpisodeId);
+
+  const selectedEpisode = episodes.find((ep) => ep.id === selectedEpisodeId) ?? null;
+
+  const episodeForForm = selectedEpisode
+    ? {
+        ...selectedEpisode,
+        questions: selectedEpisode.questions.length > 0 ? selectedEpisode.questions : MOCK_QUESTIONS,
+      }
+    : null;
+
+  const isMock = !!selectedEpisode && selectedEpisode.questions.length === 0;
+
+  // Filter allPredictions to only those question IDs belonging to the selected episode
+  const existingPredictions: Record<number, string> = selectedEpisode
+    ? Object.fromEntries(
+        selectedEpisode.questions
+          .map((q) => [q.id, allPredictions[q.id]])
+          .filter(([, v]) => v !== undefined)
+      )
+    : {};
 
   return (
     <div>
@@ -68,13 +112,31 @@ export default function PredictionsPageWrapper({
 
       {tab === "episode" && (
         <>
-          {!episode ? (
+          {/* Episode selector */}
+          {episodes.length > 0 && (
+            <div className="mb-4">
+              <select
+                value={selectedEpisodeId ?? ""}
+                onChange={(e) => setSelectedEpisodeId(Number(e.target.value))}
+                className="w-full rounded-lg border border-white/10 bg-earth px-3 py-2.5 text-sm text-parchment outline-none focus:ring-2 focus:ring-survivor-green/30 transition-shadow"
+              >
+                {[...episodes].reverse().map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    Episode {ep.episode_number}{formatAirDate(ep.air_date)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!episodeForForm ? (
             <div className="rounded-xl border border-white/10 bg-earth-surface p-8 text-center">
               <p className="text-parchment/40 text-sm">No episodes yet — check back soon!</p>
             </div>
           ) : (
             <PredictionsForm
-              episode={episode}
+              key={selectedEpisodeId}
+              episode={episodeForForm}
               userId={userId}
               existingPredictions={existingPredictions}
               tribeOptions={tribeOptions}

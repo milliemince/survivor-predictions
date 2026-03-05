@@ -9,6 +9,7 @@ type Question = {
   lock_time: string;
   answer_type: "player" | "tribe" | "free";
   num_players: number;
+  correct_answer: string | null;
 };
 
 type Episode = {
@@ -18,16 +19,7 @@ type Episode = {
   questions: Question[];
 };
 
-const MOCK_QUESTIONS: Question[] = [
-  {
-    id: -1,
-    question_text: "Who is getting eliminated tonight?",
-    point_value: 1,
-    lock_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    answer_type: "player" as const,
-    num_players: 1,
-  },
-];
+const DEFAULT_EPISODE_NUMBER = 3;
 
 export default async function PredictionsPage() {
   const supabase = await createClient();
@@ -39,12 +31,10 @@ export default async function PredictionsPage() {
 
   const [{ data: episodes }, { data: tribeStateRows }, { data: eliminatedRows }, { data: seasonPredRows }] =
     await Promise.all([
-      // Fetch recent episodes; we'll pick the earliest one with open questions below
       supabase
         .from("episodes")
-        .select("id, episode_number, air_date, questions(id, question_text, point_value, lock_time, answer_type, num_players)")
-        .order("episode_number", { ascending: false })
-        .limit(3),
+        .select("id, episode_number, air_date, questions(id, question_text, point_value, lock_time, answer_type, num_players, correct_answer)")
+        .order("episode_number", { ascending: true }),
       supabase
         .from("tribe_states")
         .select("tribe_name, player_name")
@@ -61,14 +51,17 @@ export default async function PredictionsPage() {
         .eq("user_id", user.id),
     ]);
 
-  // Show the earliest episode with at least one open question; fall back to latest
-  const nowIso = new Date().toISOString();
-  const episode: Episode | null =
-    [...(episodes ?? [])]
-      .reverse()
-      .find((ep) => ep.questions.some((q) => q.lock_time > nowIso)) ??
-    episodes?.[0] ??
+  const allEpisodes: Episode[] = (episodes ?? []).map((ep) => ({
+    ...ep,
+    questions: (ep.questions as Question[]) ?? [],
+  }));
+
+  // Default to episode 3, fall back to last episode
+  const initialEpisode =
+    allEpisodes.find((ep) => ep.episode_number === DEFAULT_EPISODE_NUMBER) ??
+    allEpisodes[allEpisodes.length - 1] ??
     null;
+
   const tribeMap = new Map<string, string[]>();
   for (const row of tribeStateRows ?? []) {
     const players = tribeMap.get(row.tribe_name) ?? [];
@@ -81,28 +74,22 @@ export default async function PredictionsPage() {
     (seasonPredRows ?? []).map((r) => [r.milestone, r.player_names])
   );
 
-  let existingPredictions: Record<number, string> = {};
-  if (episode && episode.questions.length > 0) {
-    const questionIds = episode.questions.map((q) => q.id);
+  // Fetch ALL predictions for this user across all episodes at once
+  const allQuestionIds = allEpisodes.flatMap((ep) => ep.questions.map((q) => q.id));
+  let allPredictions: Record<number, string> = {};
+  if (allQuestionIds.length > 0) {
     const { data: preds } = await supabase
       .from("predictions")
       .select("question_id, predicted_answer")
       .eq("user_id", user.id)
-      .in("question_id", questionIds);
+      .in("question_id", allQuestionIds);
 
     if (preds) {
-      existingPredictions = Object.fromEntries(
+      allPredictions = Object.fromEntries(
         preds.map((p) => [p.question_id, p.predicted_answer])
       );
     }
   }
-
-  const episodeForForm = episode
-    ? {
-        ...episode,
-        questions: episode.questions.length > 0 ? episode.questions : MOCK_QUESTIONS,
-      }
-    : null;
 
   return (
     <div>
@@ -110,30 +97,16 @@ export default async function PredictionsPage() {
         <h1 className="font-display text-3xl uppercase tracking-wide text-parchment">
           Predictions
         </h1>
-        {episode && (
-          <p className="text-parchment/50 mt-1">
-            Episode {episode.episode_number}
-            {episode.air_date &&
-              (() => {
-                const [y, mo, d] = episode.air_date.split("-").map(Number);
-                return ` — ${new Date(y, mo - 1, d).toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })}`;
-              })()}
-          </p>
-        )}
       </div>
 
       <PredictionsPageWrapper
-        episode={episodeForForm}
+        episodes={allEpisodes}
+        initialEpisodeId={initialEpisode?.id ?? null}
         userId={user.id}
-        existingPredictions={existingPredictions}
+        allPredictions={allPredictions}
         existingSeasonPredictions={existingSeasonPredictions}
         tribeOptions={tribeOptions}
         eliminatedNames={eliminatedNames}
-        isMock={episode !== null && episode.questions.length === 0}
       />
     </div>
   );

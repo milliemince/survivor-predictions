@@ -12,6 +12,7 @@ type Question = {
   lock_time: string;
   answer_type: "player" | "tribe" | "free";
   num_players: number;
+  correct_answer: string | null;
 };
 
 type Episode = {
@@ -154,11 +155,27 @@ export default function PredictionsForm({
                   .filter(Boolean)
               : [];
 
+            // Scoring: case-insensitive, trimmed comparison (matches the score_question RPC)
+            const correctAnswer = question.correct_answer ?? null;
+            const isScored = locked && correctAnswer !== null;
+            const userAnswerNorm = (answers[question.id] ?? "").toLowerCase().trim();
+            const correctNorm = correctAnswer?.toLowerCase().trim() ?? "";
+            // For player questions the answer may be comma-separated; check if correct is among picks
+            const gotCorrect = isScored && userAnswerNorm !== "" && (
+              userAnswerNorm === correctNorm ||
+              userAnswerNorm.split(",").map((s) => s.trim()).includes(correctNorm)
+            );
+            const gotWrong = isScored && hasAnswer && !gotCorrect;
+
             return (
               <div
                 key={question.id}
                 className={`rounded-xl border transition-opacity ${
-                  locked
+                  isScored
+                    ? gotCorrect
+                      ? "border-survivor-green/40 bg-survivor-green/5"
+                      : "border-tribal-red/30 bg-tribal-red/5"
+                    : locked
                     ? "opacity-60 border-white/5 bg-earth/50"
                     : "border-white/10 bg-earth-surface"
                 }`}
@@ -168,19 +185,34 @@ export default function PredictionsForm({
                   <p className="text-sm font-medium leading-relaxed text-parchment">
                     {question.question_text}
                   </p>
-                  <span className="shrink-0 rounded-full bg-ocean-blue/20 px-2.5 py-0.5 text-xs font-semibold text-ocean-blue">
-                    {question.point_value} pt{question.point_value !== 1 ? "s" : ""}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isScored && (
+                      <span className={`text-base leading-none ${gotCorrect ? "text-survivor-green" : "text-tribal-red"}`}>
+                        {gotCorrect ? "✓" : "✗"}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-ocean-blue/20 px-2.5 py-0.5 text-xs font-semibold text-ocean-blue">
+                      {question.point_value} pt{question.point_value !== 1 ? "s" : ""}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Answer area */}
                 <div className="px-5 pb-4">
                   {locked ? (
                     // Locked state
-                    <div className="rounded-lg bg-earth border border-white/10 px-3 py-2.5">
+                    <div className={`rounded-lg px-3 py-2.5 border ${
+                      isScored
+                        ? gotCorrect
+                          ? "bg-survivor-green/10 border-survivor-green/20"
+                          : "bg-tribal-red/10 border-tribal-red/20"
+                        : "bg-earth border-white/10"
+                    }`}>
                       {submittedPlayers.length > 0 ? (
                         <div className="space-y-2">
-                          <p className="text-xs text-parchment/40">🔒 Your pick{submittedPlayers.length > 1 ? "s" : ""}</p>
+                          <p className={`text-xs ${isScored ? (gotCorrect ? "text-survivor-green/70" : "text-tribal-red/70") : "text-parchment/40"}`}>
+                            {isScored ? (gotCorrect ? "✓ Correct!" : "✗ Incorrect") : `🔒 Your pick${submittedPlayers.length > 1 ? "s" : ""}`}
+                          </p>
                           <div className="flex flex-wrap gap-3">
                             {submittedPlayers.map((p) => p && (
                               <div key={p.id} className="flex items-center gap-2">
@@ -191,14 +223,26 @@ export default function PredictionsForm({
                               </div>
                             ))}
                           </div>
+                          {gotWrong && correctAnswer && (
+                            <p className="text-xs text-parchment/50 mt-1">
+                              Correct answer: <span className="font-semibold text-survivor-green">{correctAnswer}</span>
+                            </p>
+                          )}
                         </div>
                       ) : (
-                        <p className="text-sm text-parchment/50">
-                          🔒{" "}
-                          {hasAnswer
-                            ? `Your answer: "${answers[question.id]}"`
-                            : "No prediction submitted"}
-                        </p>
+                        <div>
+                          <p className={`text-sm ${isScored ? (gotCorrect ? "text-survivor-green" : "text-tribal-red/80") : "text-parchment/50"}`}>
+                            {isScored ? (gotCorrect ? "✓ " : "✗ ") : "🔒 "}
+                            {hasAnswer
+                              ? `Your answer: "${answers[question.id]}"`
+                              : "No prediction submitted"}
+                          </p>
+                          {gotWrong && correctAnswer && (
+                            <p className="text-xs text-parchment/50 mt-1">
+                              Correct answer: <span className="font-semibold text-survivor-green">{correctAnswer}</span>
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   ) : isPlayerQuestion ? (
@@ -252,7 +296,7 @@ export default function PredictionsForm({
 
         {isMock && (
           <div className="mb-4 rounded-lg border border-amber-100/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
-            <span className="font-semibold">Preview only</span> — add this question via the Admin panel to enable saving.
+            <span className="font-semibold">Preview only</span> - This question is not open for predictions yet.
           </div>
         )}
 

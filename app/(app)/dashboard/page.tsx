@@ -50,12 +50,11 @@ export default async function DashboardPage() {
   const [profileResult, leaderboardResult, episodesResult, tribeResult] = await Promise.all([
     supabase.from("profiles").select("username, name").eq("id", user.id).single(),
     supabase.from("leaderboard").select("total_points, rank").eq("user_id", user.id).single(),
-    // Next upcoming episode: earliest air_date that is today or in the future (Eastern time)
+    // Hardcoded to episode 3
     supabase
       .from("episodes")
       .select("id, episode_number, air_date, questions(id, lock_time)")
-      .gte("air_date", todayEastern())
-      .order("air_date", { ascending: true })
+      .eq("episode_number", 3)
       .limit(1),
     supabase
       .from("tribe_states")

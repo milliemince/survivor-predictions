@@ -174,14 +174,14 @@ export async function POST() {
         return;
       }
 
-      // Finish column: index 6 — "Day N" means eliminated
-      const finishCell = cells.eq(6);
-      const finishText = finishCell.text().trim();
-      const dayMatch = finishText.match(/Day\s*(\d+)/i);
+      // Day column: index 7 — "Day N" means eliminated (index 6 is the finish label like "1st voted out")
+      const dayCell = cells.eq(7);
+      const dayText = dayCell.text().trim();
+      const dayMatch = dayText.match(/Day\s*(\d+)/i);
       const isEliminated = !!dayMatch;
       const day = dayMatch ? parseInt(dayMatch[1]) : null;
 
-      console.log(`[row ${rowIdx}] finish col[6]: "${finishText}" → isEliminated=${isEliminated} day=${day}`);
+      console.log(`[row ${rowIdx}] day col[7]: "${dayText}" → isEliminated=${isEliminated} day=${day}`);
 
       const normalizedName = normalizeName(playerName);
       console.log(`[row ${rowIdx}] PARSED: "${normalizedName}" → tribe="${tribeName}" eliminated=${isEliminated}`);
