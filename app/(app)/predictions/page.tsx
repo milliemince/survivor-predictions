@@ -19,8 +19,6 @@ type Episode = {
   questions: Question[];
 };
 
-const DEFAULT_EPISODE_NUMBER = 3;
-
 export default async function PredictionsPage() {
   const supabase = await createClient();
   const {
@@ -29,7 +27,7 @@ export default async function PredictionsPage() {
 
   if (!user) redirect("/login");
 
-  const [{ data: episodes }, { data: tribeStateRows }, { data: eliminatedRows }, { data: seasonPredRows }] =
+  const [{ data: episodes }, { data: allTribeRows }, { data: seasonPredRows }] =
     await Promise.all([
       supabase
         .from("episodes")
@@ -37,30 +35,35 @@ export default async function PredictionsPage() {
         .order("episode_number", { ascending: true }),
       supabase
         .from("tribe_states")
-        .select("tribe_name, player_name")
+        .select("tribe_name, player_name, is_eliminated, episode_number")
         .eq("season", 50)
-        .eq("is_eliminated", false),
-      supabase
-        .from("tribe_states")
-        .select("player_name")
-        .eq("season", 50)
-        .eq("is_eliminated", true),
+        .order("episode_number", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(200),
       supabase
         .from("season_predictions")
         .select("milestone, player_names")
         .eq("user_id", user.id),
     ]);
 
+  // Filter to latest episode snapshot only (same logic as dashboard)
+  const tribeRowsAll = allTribeRows ?? [];
+  const maxEp = tribeRowsAll.reduce((max, r) => Math.max(max, r.episode_number), 0);
+  const latestTribeRows = tribeRowsAll.filter((r) => r.episode_number === maxEp);
+  const tribeStateRows = latestTribeRows.filter((r) => !r.is_eliminated);
+  const eliminatedRows = latestTribeRows.filter((r) => r.is_eliminated);
+
   const allEpisodes: Episode[] = (episodes ?? []).map((ep) => ({
     ...ep,
     questions: (ep.questions as Question[]) ?? [],
   }));
 
-  // Default to episode 3, fall back to last episode
+  // Current episode = earliest episode with unlocked questions, else latest
+  const nowMs = Date.now();
   const initialEpisode =
-    allEpisodes.find((ep) => ep.episode_number === DEFAULT_EPISODE_NUMBER) ??
-    allEpisodes[allEpisodes.length - 1] ??
-    null;
+    allEpisodes.find((ep) =>
+      ep.questions.some((q) => new Date(q.lock_time).getTime() > nowMs)
+    ) ?? allEpisodes[allEpisodes.length - 1] ?? null;
 
   const tribeMap = new Map<string, string[]>();
   for (const row of tribeStateRows ?? []) {

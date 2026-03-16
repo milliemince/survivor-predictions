@@ -50,12 +50,10 @@ export default async function DashboardPage() {
   const [profileResult, leaderboardResult, episodesResult, tribeResult] = await Promise.all([
     supabase.from("profiles").select("username, name").eq("id", user.id).single(),
     supabase.from("leaderboard").select("total_points, rank").eq("user_id", user.id).single(),
-    // Hardcoded to episode 3
     supabase
       .from("episodes")
       .select("id, episode_number, air_date, questions(id, lock_time)")
-      .eq("episode_number", 3)
-      .limit(1),
+      .order("episode_number", { ascending: true }),
     supabase
       .from("tribe_states")
       .select("id, tribe_name, tribe_color, player_name, is_eliminated, episode_number")
@@ -69,7 +67,14 @@ export default async function DashboardPage() {
   const totalPoints = leaderboardResult.data?.total_points ?? 0;
   const rank = leaderboardResult.data?.rank ?? null;
 
-  const latestEpisode: Episode | null = episodesResult.data?.[0] ?? null;
+  // Current episode = earliest episode with at least one unlocked question,
+  // or the latest episode if everything is locked.
+  const allEpisodes: Episode[] = (episodesResult.data ?? []) as Episode[];
+  const nowMs = Date.now();
+  const latestEpisode: Episode | null =
+    allEpisodes.find((ep) =>
+      ep.questions.some((q) => new Date(q.lock_time).getTime() > nowMs)
+    ) ?? allEpisodes[allEpisodes.length - 1] ?? null;
 
   const now = new Date();
   const upcomingLocks = (latestEpisode?.questions ?? [])
