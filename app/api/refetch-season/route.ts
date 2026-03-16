@@ -22,8 +22,6 @@ function etAirTimeToUTC(airDate: string): string {
   return new Date(Date.UTC(year, month - 1, day, 20 + offsetHours, 0)).toISOString();
 }
 const SEASON = 50;
-const CONTESTANTS_SECTION = 5;
-const SEASON_SUMMARY_SECTION = 6;
 
 // Strings that appear in Wikipedia tables but are not player names
 const WIKI_NON_PLAYERS = new Set(["none", "vatu", "beria", "solana", "tiaka"]);
@@ -55,6 +53,28 @@ async function fetchSection(index: number): Promise<string> {
   if (!res.ok) throw new Error(`Wikipedia fetch failed for section ${index}: ${res.status}`);
   const json = await res.json();
   return json?.parse?.text?.["*"] ?? "";
+}
+
+/** Look up current section indices by name (they shift when Wikipedia editors add sections). */
+async function fetchSectionIndices(): Promise<{ contestants: number; seasonSummary: number }> {
+  const res = await fetch(
+    `https://en.wikipedia.org/w/api.php?action=parse&page=${WIKI_PAGE}&prop=sections&format=json`,
+    { headers: { "User-Agent": "SurvivorPredictionsApp/1.0" } }
+  );
+  if (!res.ok) throw new Error(`Wikipedia sections fetch failed: ${res.status}`);
+  const json = await res.json();
+  const sections: { line: string; index: string }[] = json?.parse?.sections ?? [];
+
+  let contestants = -1;
+  let seasonSummary = -1;
+  for (const s of sections) {
+    const name = s.line.toLowerCase().replace(/&amp;/g, "&");
+    if (name === "contestants") contestants = parseInt(s.index);
+    else if (name === "season summary") seasonSummary = parseInt(s.index);
+  }
+  if (contestants < 0) throw new Error("Could not find 'Contestants' section on Wikipedia page");
+  if (seasonSummary < 0) throw new Error("Could not find 'Season summary' section on Wikipedia page");
+  return { contestants, seasonSummary };
 }
 
 /** Parse "February 25, 2026" → "2026-02-25" */
@@ -103,13 +123,14 @@ export async function POST() {
 
     const episodeNumber = epData?.[0]?.episode_number ?? 0;
 
-    // 3. Fetch both sections in parallel
+    // 3. Look up section indices dynamically, then fetch both in parallel
+    const sectionIdx = await fetchSectionIndices();
     const [contestantsHtml, seasonHtml] = await Promise.all([
-      fetchSection(CONTESTANTS_SECTION),
-      fetchSection(SEASON_SUMMARY_SECTION),
+      fetchSection(sectionIdx.contestants),
+      fetchSection(sectionIdx.seasonSummary),
     ]);
 
-    // 4. Parse section 5 (contestants) — column-index approach
+    // 4. Parse contestants table — detect column layout from headers dynamically
     type PlayerRow = {
       tribe_name: string;
       tribe_color: string;
@@ -121,70 +142,119 @@ export async function POST() {
     const playerRows: PlayerRow[] = [];
     const $t = cheerio.load(contestantsHtml);
 
+    // --- Detect column layout from the two header rows ---
+    // Header row 0 uses colspan to group columns (e.g. "Tribe" cs=3, "Finish" cs=2).
+    // Header row 1 has the sub-headers (e.g. "Original", "Switched", "Merged", "Placement", "Day").
+    // We build a flat column map so data rows can be indexed correctly regardless of
+    // how many tribe sub-columns Wikipedia currently has.
+    const headerRows = $t("table.wikitable tbody tr").filter((_, tr) => {
+      const firstCell = $t(tr).find("th, td").first();
+      return firstCell.is("th") && $t(tr).find(".fn").length === 0;
+    });
+
+    // Build logical-column-index → name map from sub-header row (row 1)
+    // We need to know: which indices are tribe columns, and which is "Day".
+    // Logical column indices for data rows account for rowspan=2 headers occupying
+    // both header rows — the sub-header row only lists columns whose parent had colspan.
+    let tribeColStart = -1;
+    let tribeColCount = 0;
+    let dayColIdx = -1;
+    let totalLogicalCols = 0;
+
+    if (headerRows.length >= 2) {
+      // From header row 0, find "Tribe" colspan and "Finish" colspan
+      const row0Cells = $t(headerRows[0]).find("th, td");
+      let logicalIdx = 0;
+      row0Cells.each((_, cell) => {
+        const cs = parseInt($t(cell).attr("colspan") ?? "1");
+        const rs = parseInt($t(cell).attr("rowspan") ?? "1");
+        const text = $t(cell).text().trim().toLowerCase();
+
+        if (text.includes("tribe")) {
+          tribeColStart = logicalIdx;
+          tribeColCount = cs;
+        }
+        // "Finish" group contains "Placement" and "Day" sub-columns
+        if (text.includes("finish")) {
+          // "Day" is the last sub-column of Finish
+          dayColIdx = logicalIdx + cs - 1;
+        }
+        logicalIdx += (rs >= 2 ? 1 : cs); // rowspan=2 headers take 1 logical slot
+        totalLogicalCols = logicalIdx;
+      });
+      // Add remaining from sub-header if needed
+      const row1Cells = $t(headerRows[1]).find("th, td");
+      // The sub-header row only covers columns whose parent had colspan (no rowspan=2)
+      // Verify by counting
+      let subCount = 0;
+      row1Cells.each(() => { subCount++; });
+      console.log(`[header] tribeColStart=${tribeColStart} tribeColCount=${tribeColCount} dayColIdx=${dayColIdx} subHeaders=${subCount}`);
+    }
+
+    if (tribeColStart < 0 || dayColIdx < 0) {
+      // Fallback: assume original layout (3 tribe cols starting at index 3, day at last tribe + 2)
+      console.warn("[header] Could not detect column layout from headers, using fallback");
+      tribeColStart = 3;
+      tribeColCount = 2;
+      dayColIdx = 6;
+    }
+
+    // For each data row, figure out which physical cell index corresponds to each
+    // logical column. Rows may have fewer physical cells due to rowspan from prior rows.
+    // Strategy: tribe columns start at physical index = tribeColStart (always present in data rows
+    // since the first 3 columns — Contestant, Age, From — never use rowspan).
+    // However cells AFTER the tribe group may shift due to rowspan on non-tribe columns
+    // (e.g. "Shot in the Dark" uses rowspan). We search right-to-left from end of row for "Day N".
+
     $t("table.wikitable tbody tr").each((rowIdx, tr) => {
       const cells = $t(tr).find("th, td");
+      if (cells.length < 4) return;
 
-      // Log every row's cell count and first cell text to understand table structure
-      const firstCellText = cells.first().text().trim().slice(0, 40);
-      console.log(`[row ${rowIdx}] cells=${cells.length} firstCell="${firstCellText}"`);
-
-      if (cells.length < 4) {
-        console.log(`[row ${rowIdx}] SKIP: too few cells (${cells.length})`);
-        return;
-      }
-
-      // Skip header rows (first cell is a <th> with no .fn inside)
+      // Skip header rows
       const firstCell = cells.first();
-      if (firstCell.is("th") && $t(tr).find(".fn").length === 0) {
-        console.log(`[row ${rowIdx}] SKIP: header row`);
-        return;
-      }
+      if (firstCell.is("th") && $t(tr).find(".fn").length === 0) return;
 
-      // Player name: prefer .fn hCard microformat
+      // Player name
       const fnEl = $t(tr).find(".fn");
-      if (!fnEl.length) {
-        console.log(`[row ${rowIdx}] SKIP: no .fn element`);
-        return;
-      }
+      if (!fnEl.length) return;
       const playerName = fnEl.first().text().trim();
-      if (!isValidPlayerName(playerName)) {
-        console.log(`[row ${rowIdx}] SKIP: invalid player name "${playerName}"`);
-        return;
+      if (!isValidPlayerName(playerName)) return;
+
+      // Current tribe: use the rightmost non-empty tribe column (Merged > Switched > Original).
+      // Tribe columns are at physical indices tribeColStart .. tribeColStart + tribeColCount - 1.
+      let tribeName = "";
+      let tribeColor = "#888888";
+      for (let i = tribeColStart + tribeColCount - 1; i >= tribeColStart; i--) {
+        const cell = cells.eq(i);
+        const text = cell.text().trim();
+        const bg = cell.attr("bgcolor") ?? "";
+        // Skip empty cells and darkgray placeholders (used for eliminated-before-swap)
+        if (!text || text.length < 2 || bg.toLowerCase() === "darkgray") continue;
+        tribeName = text;
+        const style = cell.attr("style") ?? "";
+        const bgMatch = style.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8}|[a-z]+)/i);
+        tribeColor = bgMatch?.[1]
+          ? bgMatch[1].startsWith("#") ? bgMatch[1] : `#${bgMatch[1]}`
+          : "#888888";
+        break;
       }
+      if (!tribeName || tribeName.length < 2) return;
 
-      // Log all cell texts to find the right column indices
-      const allCells = Array.from({ length: cells.length }, (_, i) =>
-        `[${i}]="${cells.eq(i).text().trim().slice(0, 20)}"`
-      ).join(" ");
-      console.log(`[row ${rowIdx}] player="${playerName}" cells: ${allCells}`);
-
-      // Original tribe: column index 3 (0-based)
-      const tribeCell = cells.eq(3);
-      const tribeName = tribeCell.text().trim();
-      const tdStyle = tribeCell.attr("style") ?? "";
-      const bgMatch = tdStyle.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8}|[a-z]+)/i);
-      const tribeColor = bgMatch?.[1]
-        ? bgMatch[1].startsWith("#") ? bgMatch[1] : `#${bgMatch[1]}`
-        : "#888888";
-
-      console.log(`[row ${rowIdx}] tribe col[3]: name="${tribeName}" style="${tdStyle}" color="${tribeColor}"`);
-
-      if (tribeName.length < 2) {
-        console.log(`[row ${rowIdx}] SKIP: empty/short tribe name "${tribeName}"`);
-        return;
+      // Day: find "Day N" by scanning cells from the right (robust against rowspan shifts)
+      let isEliminated = false;
+      let day: number | null = null;
+      for (let i = cells.length - 1; i > tribeColStart + tribeColCount; i--) {
+        const text = cells.eq(i).text().trim();
+        const m = text.match(/^Day\s*(\d+)$/i);
+        if (m) {
+          isEliminated = true;
+          day = parseInt(m[1]);
+          break;
+        }
       }
-
-      // Day column: index 7 — "Day N" means eliminated (index 6 is the finish label like "1st voted out")
-      const dayCell = cells.eq(7);
-      const dayText = dayCell.text().trim();
-      const dayMatch = dayText.match(/Day\s*(\d+)/i);
-      const isEliminated = !!dayMatch;
-      const day = dayMatch ? parseInt(dayMatch[1]) : null;
-
-      console.log(`[row ${rowIdx}] day col[7]: "${dayText}" → isEliminated=${isEliminated} day=${day}`);
 
       const normalizedName = normalizeName(playerName);
-      console.log(`[row ${rowIdx}] PARSED: "${normalizedName}" → tribe="${tribeName}" eliminated=${isEliminated}`);
+      console.log(`[row ${rowIdx}] "${normalizedName}" → tribe="${tribeName}" (${tribeColor}) eliminated=${isEliminated}${day ? ` day=${day}` : ""}`);
       playerRows.push({
         tribe_name: tribeName,
         tribe_color: tribeColor,
