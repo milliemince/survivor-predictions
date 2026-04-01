@@ -23,8 +23,8 @@ function etAirTimeToUTC(airDate: string): string {
 }
 const SEASON = 50;
 
-// Strings that appear in Wikipedia tables but are not player names
-const WIKI_NON_PLAYERS = new Set(["none", "vatu", "beria", "solana", "tiaka"]);
+// Strings that appear in Wikipedia tables but are not player names or valid tribe names
+const WIKI_NON_PLAYERS = new Set(["none", "vatu", "beria", "solana", "tiaka", "merged tribe"]);
 
 function isValidPlayerName(name: string): boolean {
   return !!name && name.length >= 2 && !WIKI_NON_PLAYERS.has(name.toLowerCase());
@@ -34,7 +34,7 @@ function isValidPlayerName(name: string): boolean {
 const WIKI_NAME_MAP: Record<string, string> = {
   'Quintavius "Q" Burdette': "Q Burdette",
   "Quintavius Burdette": "Q Burdette",
-  "Stephenie LaGrossa Kendrick": "Stephenie Lagrossa Kendrick",
+  "Stephenie LaGrossa Kendrick": "Stephanie Lagrossa Kendrick",
   'Oscar "Ozzy" Lusth': "Ozzy Lusth",
   "Oscar Lusth": "Ozzy Lusth",
   'Dianelys "Dee" Valladares': "Dee Valladares",
@@ -130,7 +130,7 @@ export async function POST() {
       fetchSection(sectionIdx.seasonSummary),
     ]);
 
-    // 4. Parse contestants table — detect column layout from headers dynamically
+    // 4. Parse contestants table using a 2D grid that resolves rowspan/colspan
     type PlayerRow = {
       tribe_name: string;
       tribe_color: string;
@@ -142,119 +142,115 @@ export async function POST() {
     const playerRows: PlayerRow[] = [];
     const $t = cheerio.load(contestantsHtml);
 
-    // --- Detect column layout from the two header rows ---
-    // Header row 0 uses colspan to group columns (e.g. "Tribe" cs=3, "Finish" cs=2).
-    // Header row 1 has the sub-headers (e.g. "Original", "Switched", "Merged", "Placement", "Day").
-    // We build a flat column map so data rows can be indexed correctly regardless of
-    // how many tribe sub-columns Wikipedia currently has.
-    const headerRows = $t("table.wikitable tbody tr").filter((_, tr) => {
-      const firstCell = $t(tr).find("th, td").first();
-      return firstCell.is("th") && $t(tr).find(".fn").length === 0;
-    });
+    // --- Build a logical 2D grid resolving rowspan/colspan ---
+    // This is necessary because cells like "Merged Tribe" (rowspan=17) and
+    // "Shot in the Dark" (rowspan=N) cause subsequent rows to have fewer physical
+    // cells, making naive physical-index access unreliable.
+    type GridCell = { text: string; color: string };
+    const tableRows = $t("table.wikitable tbody tr").toArray();
+    const grid: (GridCell | null)[][] = [];
 
-    // Build logical-column-index → name map from sub-header row (row 1)
-    // We need to know: which indices are tribe columns, and which is "Day".
-    // Logical column indices for data rows account for rowspan=2 headers occupying
-    // both header rows — the sub-header row only lists columns whose parent had colspan.
+    for (let r = 0; r < tableRows.length; r++) {
+      if (!grid[r]) grid[r] = [];
+      const cells = $t(tableRows[r]).find("th, td").toArray();
+      let cellIdx = 0;
+      let c = 0;
+      while (cellIdx < cells.length) {
+        while (grid[r][c]) c++;
+        const cell = cells[cellIdx];
+        const rs = parseInt($t(cell).attr("rowspan") ?? "1");
+        const cs = parseInt($t(cell).attr("colspan") ?? "1");
+        const text = $t(cell).text().trim();
+        const bg = ($t(cell).attr("bgcolor") ?? "").toLowerCase();
+        const style = $t(cell).attr("style") ?? "";
+        const bgMatch = style.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8})/i);
+        const color = bgMatch?.[1] ?? (bg || "");
+
+        for (let dr = 0; dr < rs; dr++) {
+          for (let dc = 0; dc < cs; dc++) {
+            if (!grid[r + dr]) grid[r + dr] = [];
+            grid[r + dr][c + dc] = { text, color };
+          }
+        }
+        cellIdx++;
+        c++;
+      }
+    }
+
+    // --- Detect tribe and day column indices from header row 0 ---
+    // Logical columns: Contestant(0), Age(1), From(2), Original(3), Switched(4), Merged(5),
+    //                  Placement(6), Day(7), SitD(8), Advantages(9)
     let tribeColStart = -1;
     let tribeColCount = 0;
     let dayColIdx = -1;
-    let totalLogicalCols = 0;
 
-    if (headerRows.length >= 2) {
-      // From header row 0, find "Tribe" colspan and "Finish" colspan
-      const row0Cells = $t(headerRows[0]).find("th, td");
-      let logicalIdx = 0;
-      row0Cells.each((_, cell) => {
-        const cs = parseInt($t(cell).attr("colspan") ?? "1");
-        const rs = parseInt($t(cell).attr("rowspan") ?? "1");
-        const text = $t(cell).text().trim().toLowerCase();
+    const row0Cells = $t(tableRows[0]).find("th, td");
+    let logicalIdx = 0;
+    row0Cells.each((_, cell) => {
+      const cs = parseInt($t(cell).attr("colspan") ?? "1");
+      const rs = parseInt($t(cell).attr("rowspan") ?? "1");
+      const text = $t(cell).text().trim().toLowerCase();
 
-        if (text.includes("tribe")) {
-          tribeColStart = logicalIdx;
-          tribeColCount = cs;
-        }
-        // "Finish" group contains "Placement" and "Day" sub-columns
-        if (text.includes("finish")) {
-          // "Day" is the last sub-column of Finish
-          dayColIdx = logicalIdx + cs - 1;
-        }
-        logicalIdx += (rs >= 2 ? 1 : cs); // rowspan=2 headers take 1 logical slot
-        totalLogicalCols = logicalIdx;
-      });
-      // Add remaining from sub-header if needed
-      const row1Cells = $t(headerRows[1]).find("th, td");
-      // The sub-header row only covers columns whose parent had colspan (no rowspan=2)
-      // Verify by counting
-      let subCount = 0;
-      row1Cells.each(() => { subCount++; });
-      console.log(`[header] tribeColStart=${tribeColStart} tribeColCount=${tribeColCount} dayColIdx=${dayColIdx} subHeaders=${subCount}`);
-    }
+      if (text.includes("tribe")) {
+        tribeColStart = logicalIdx;
+        tribeColCount = cs;
+      }
+      if (text.includes("finish")) {
+        dayColIdx = logicalIdx + cs - 1;
+      }
+      logicalIdx += rs >= 2 ? 1 : cs;
+    });
 
     if (tribeColStart < 0 || dayColIdx < 0) {
-      // Fallback: assume original layout (3 tribe cols starting at index 3, day at last tribe + 2)
-      console.warn("[header] Could not detect column layout from headers, using fallback");
+      console.warn("[header] Could not detect column layout, using fallback");
       tribeColStart = 3;
-      tribeColCount = 2;
-      dayColIdx = 6;
+      tribeColCount = 3;
+      dayColIdx = 7;
     }
 
-    // For each data row, figure out which physical cell index corresponds to each
-    // logical column. Rows may have fewer physical cells due to rowspan from prior rows.
-    // Strategy: tribe columns start at physical index = tribeColStart (always present in data rows
-    // since the first 3 columns — Contestant, Age, From — never use rowspan).
-    // However cells AFTER the tribe group may shift due to rowspan on non-tribe columns
-    // (e.g. "Shot in the Dark" uses rowspan). We search right-to-left from end of row for "Day N".
+    console.log(`[header] tribeColStart=${tribeColStart} tribeColCount=${tribeColCount} dayColIdx=${dayColIdx}`);
 
-    $t("table.wikitable tbody tr").each((rowIdx, tr) => {
-      const cells = $t(tr).find("th, td");
-      if (cells.length < 4) return;
-
-      // Skip header rows
-      const firstCell = cells.first();
-      if (firstCell.is("th") && $t(tr).find(".fn").length === 0) return;
-
-      // Player name
-      const fnEl = $t(tr).find(".fn");
-      if (!fnEl.length) return;
+    // --- Extract player data using logical grid positions ---
+    // Check tribe columns right-to-left (Merged → Switched → Original)
+    for (let r = 0; r < tableRows.length; r++) {
+      const fnEl = $t(tableRows[r]).find(".fn");
+      if (!fnEl.length) continue;
       const playerName = fnEl.first().text().trim();
-      if (!isValidPlayerName(playerName)) return;
+      if (!isValidPlayerName(playerName)) continue;
 
-      // Current tribe: use the rightmost non-empty tribe column (Merged > Switched > Original).
-      // Tribe columns are at physical indices tribeColStart .. tribeColStart + tribeColCount - 1.
+      const row = grid[r];
+      if (!row) continue;
+
+      // Current tribe: rightmost non-empty, non-darkgray, non-label tribe column
+      // Note: WIKI_NON_PLAYERS contains tribe names (vatu, kalo etc.) for player-name
+      // filtering — do NOT use it here. Only skip generic labels like "Merged Tribe".
       let tribeName = "";
       let tribeColor = "#888888";
       for (let i = tribeColStart + tribeColCount - 1; i >= tribeColStart; i--) {
-        const cell = cells.eq(i);
-        const text = cell.text().trim();
-        const bg = cell.attr("bgcolor") ?? "";
-        // Skip empty cells and darkgray placeholders (used for eliminated-before-swap)
-        if (!text || text.length < 2 || bg.toLowerCase() === "darkgray") continue;
-        tribeName = text;
-        const style = cell.attr("style") ?? "";
-        const bgMatch = style.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8}|[a-z]+)/i);
-        tribeColor = bgMatch?.[1]
-          ? bgMatch[1].startsWith("#") ? bgMatch[1] : `#${bgMatch[1]}`
-          : "#888888";
+        const cell = row[i];
+        if (!cell || !cell.text || cell.text.length < 2) continue;
+        if (cell.color === "darkgray") continue;
+        if (cell.text.toLowerCase().includes("tribe")) continue; // skip "Merged Tribe" etc.
+        tribeName = cell.text;
+        tribeColor = cell.color.startsWith("#") ? cell.color : "#888888";
         break;
       }
-      if (!tribeName || tribeName.length < 2) return;
+      if (!tribeName) continue;
 
-      // Day: find "Day N" by scanning cells from the right (robust against rowspan shifts)
+      // Day column
       let isEliminated = false;
       let day: number | null = null;
-      for (let i = cells.length - 1; i > tribeColStart + tribeColCount; i--) {
-        const text = cells.eq(i).text().trim();
-        const m = text.match(/^Day\s*(\d+)$/i);
+      const dayCell = row[dayColIdx];
+      if (dayCell) {
+        const m = dayCell.text.match(/Day\s*(\d+)/i);
         if (m) {
           isEliminated = true;
           day = parseInt(m[1]);
-          break;
         }
       }
 
       const normalizedName = normalizeName(playerName);
-      console.log(`[row ${rowIdx}] "${normalizedName}" → tribe="${tribeName}" (${tribeColor}) eliminated=${isEliminated}${day ? ` day=${day}` : ""}`);
+      console.log(`[row ${r}] "${normalizedName}" → tribe="${tribeName}" (${tribeColor}) eliminated=${isEliminated}${day ? ` day=${day}` : ""}`);
       playerRows.push({
         tribe_name: tribeName,
         tribe_color: tribeColor,
@@ -262,7 +258,7 @@ export async function POST() {
         is_eliminated: isEliminated,
         day,
       });
-    });
+    }
 
     const tribeBreakdown = playerRows.reduce<Record<string, { active: number; eliminated: number }>>((acc, r) => {
       if (!acc[r.tribe_name]) acc[r.tribe_name] = { active: 0, eliminated: 0 };
