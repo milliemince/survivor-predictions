@@ -64,7 +64,7 @@ export default function TribeGrid({
           <h2 className="font-display text-lg uppercase tracking-wide text-parchment/60 mb-3">
             Current Tribes
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${tribes.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
             {tribes.map(({ name: tribeName, color, players, eliminatedPlayers }) => (
               <div
                 key={tribeName}
