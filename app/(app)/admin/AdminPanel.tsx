@@ -603,9 +603,16 @@ export default function AdminPanel({
                     required
                     value={correctAnswer}
                     onChange={(e) => setCorrectAnswer(e.target.value)}
-                    placeholder="e.g. Sandra"
+                    placeholder="e.g. Sandra  (use | for multiple: Sandra|Parvati|Tony)"
                     className="w-full rounded-lg border border-black/10 px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-orange-200"
                   />
+                  {correctAnswer.includes("|") && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      Multi-answer: predictions matching any of{" "}
+                      {correctAnswer.split("|").map((s) => s.trim()).filter(Boolean).join(", ")}{" "}
+                      will be marked correct.
+                    </p>
+                  )}
                 </div>
 
                 {/* Quick-fill dropdowns */}
@@ -616,10 +623,15 @@ export default function AdminPanel({
                       <label className="block text-xs text-zinc-700 mb-1">Player</label>
                       <select
                         value=""
-                        onChange={(e) => { if (e.target.value) setCorrectAnswer(e.target.value); }}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          setCorrectAnswer((prev) =>
+                            prev ? prev + "|" + e.target.value : e.target.value
+                          );
+                        }}
                         className="w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                       >
-                        <option value="">— pick player —</option>
+                        <option value="">— add player —</option>
                         {SEASON_50_PLAYERS.map((p) => (
                           <option key={p.id} value={p.name}>{p.name}</option>
                         ))}

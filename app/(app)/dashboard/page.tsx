@@ -113,12 +113,14 @@ export default async function DashboardPage() {
       tribeMap[row.tribe_name].players.push(row.player_name);
     }
   }
-  const tribes: TribeData[] = Object.entries(tribeMap).map(([name, { color, players, eliminatedPlayers }]) => ({
-    name,
-    color,
-    players,
-    eliminatedPlayers,
-  }));
+  const tribes: TribeData[] = Object.entries(tribeMap)
+    .filter(([, { players }]) => players.length > 0)
+    .map(([name, { color, players, eliminatedPlayers }]) => ({
+      name,
+      color,
+      players,
+      eliminatedPlayers,
+    }));
 
   return (
     <div>

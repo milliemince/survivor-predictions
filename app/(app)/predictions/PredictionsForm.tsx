@@ -159,11 +159,12 @@ export default function PredictionsForm({
             const correctAnswer = question.correct_answer ?? null;
             const isScored = locked && correctAnswer !== null;
             const userAnswerNorm = (answers[question.id] ?? "").toLowerCase().trim();
-            const correctNorm = correctAnswer?.toLowerCase().trim() ?? "";
-            // For player questions the answer may be comma-separated; check if correct is among picks
-            const gotCorrect = isScored && userAnswerNorm !== "" && (
-              userAnswerNorm === correctNorm ||
-              userAnswerNorm.split(",").map((s) => s.trim()).includes(correctNorm)
+            // correct_answer may be pipe-separated for multi-answer questions (e.g. triple elimination)
+            const correctOptions = (correctAnswer ?? "").split("|").map((s) => s.toLowerCase().trim()).filter(Boolean);
+            // For player questions the answer may be comma-separated; check if any pick matches any correct option
+            const userPicks = userAnswerNorm.split(",").map((s) => s.trim()).filter(Boolean);
+            const gotCorrect = isScored && userPicks.length > 0 && (
+              userPicks.some((pick) => correctOptions.includes(pick))
             );
             const gotWrong = isScored && hasAnswer && !gotCorrect;
 
@@ -225,7 +226,7 @@ export default function PredictionsForm({
                           </div>
                           {gotWrong && correctAnswer && (
                             <p className="text-xs text-parchment/50 mt-1">
-                              Correct answer: <span className="font-semibold text-survivor-green">{correctAnswer}</span>
+                              Correct answer: <span className="font-semibold text-survivor-green">{correctAnswer?.includes("|") ? correctAnswer.split("|").map((s) => s.trim()).join(", ") : correctAnswer}</span>
                             </p>
                           )}
                         </div>
@@ -239,7 +240,7 @@ export default function PredictionsForm({
                           </p>
                           {gotWrong && correctAnswer && (
                             <p className="text-xs text-parchment/50 mt-1">
-                              Correct answer: <span className="font-semibold text-survivor-green">{correctAnswer}</span>
+                              Correct answer: <span className="font-semibold text-survivor-green">{correctAnswer?.includes("|") ? correctAnswer.split("|").map((s) => s.trim()).join(", ") : correctAnswer}</span>
                             </p>
                           )}
                         </div>
