@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import PlayerSelector from "./PlayerSelector";
 import { SEASON_50_PLAYERS, type Player } from "./players";
 
@@ -23,14 +21,6 @@ function namesToIds(names: string): string[] {
     .filter(Boolean);
 }
 
-/** Convert player ID array → comma-separated player names */
-function idsToNames(ids: string[]): string {
-  return ids
-    .map((id) => SEASON_50_PLAYERS.find((p) => p.id === id)?.name ?? "")
-    .filter(Boolean)
-    .join(",");
-}
-
 export default function SeasonPredictionsForm({
   userId,
   existingPredictions,
@@ -40,34 +30,10 @@ export default function SeasonPredictionsForm({
   existingPredictions: Record<string, string>; // milestone → comma-separated names
   eliminatedNames?: string[];
 }) {
-  // selectedIds: milestone → array of player IDs
-  const [selectedIds, setSelectedIds] = useState<Record<MilestoneKey, string[]>>(
-    () =>
-      Object.fromEntries(
-        MILESTONES.map((m) => [m.key, namesToIds(existingPredictions[m.key] ?? "")])
-      ) as Record<MilestoneKey, string[]>
-  );
-
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
-
-  // Cascade: when a milestone changes, drop any downstream selections no longer in the new pool
-  function handleChange(key: MilestoneKey, ids: string[]) {
-    setSelectedIds((prev) => {
-      const next = { ...prev, [key]: ids };
-      if (key === "merge") {
-        next.top_7 = next.top_7.filter((id) => ids.includes(id));
-        next.final_tribal = next.final_tribal.filter((id) => next.top_7.includes(id));
-        next.sole_survivor = next.sole_survivor.filter((id) => next.final_tribal.includes(id));
-      } else if (key === "top_7") {
-        next.final_tribal = next.final_tribal.filter((id) => ids.includes(id));
-        next.sole_survivor = next.sole_survivor.filter((id) => next.final_tribal.includes(id));
-      } else if (key === "final_tribal") {
-        next.sole_survivor = next.sole_survivor.filter((id) => ids.includes(id));
-      }
-      return next;
-    });
-  }
+  // selectedIds: milestone → array of player IDs (read-only, predictions are locked)
+  const selectedIds = Object.fromEntries(
+    MILESTONES.map((m) => [m.key, namesToIds(existingPredictions[m.key] ?? "")])
+  ) as Record<MilestoneKey, string[]>;
 
   // Derive the available player pool for each milestone from the parent milestone's selections
   function poolForMilestone(key: MilestoneKey): Player[] {
@@ -76,31 +42,6 @@ export default function SeasonPredictionsForm({
     if (key === "final_tribal") return SEASON_50_PLAYERS.filter((p) => selectedIds.top_7.includes(p.id));
     if (key === "sole_survivor") return SEASON_50_PLAYERS.filter((p) => selectedIds.final_tribal.includes(p.id));
     return SEASON_50_PLAYERS;
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    setToast(null);
-
-    const rows = MILESTONES.map((m) => ({
-      user_id: userId,
-      milestone: m.key,
-      player_names: idsToNames(selectedIds[m.key]),
-      updated_at: new Date().toISOString(),
-    }));
-
-    const { error } = await supabase
-      .from("season_predictions")
-      .upsert(rows, { onConflict: "user_id,milestone" });
-
-    setSaving(false);
-
-    if (error) {
-      setToast({ type: "error", message: error.message });
-    } else {
-      setToast({ type: "success", message: "Season predictions saved!" });
-      setTimeout(() => setToast(null), 4000);
-    }
   }
 
   return (
@@ -142,7 +83,7 @@ export default function SeasonPredictionsForm({
               ) : (
                 <PlayerSelector
                   selected={selected}
-                  onChange={(ids) => handleChange(milestone.key, ids)}
+                  onChange={() => {}}
                   maxSelections={needed}
                   eliminatedNames={eliminatedNames}
                   availablePlayers={poolForMilestone(milestone.key)}
@@ -153,26 +94,9 @@ export default function SeasonPredictionsForm({
         );
       })}
 
-      {toast && (
-        <div
-          className={`rounded-lg px-4 py-3 text-sm font-medium ${
-            toast.type === "success"
-              ? "bg-survivor-green/10 text-survivor-green border border-survivor-green/20"
-              : "bg-tribal-red/10 text-tribal-red border border-tribal-red/20"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full rounded-full bg-survivor-green py-3 text-sm font-semibold text-white hover:bg-survivor-green-dark disabled:opacity-50 transition-colors"
-      >
-        {saving ? "Saving..." : "Save Season Predictions"}
-      </button>
+      <div className="rounded-lg px-4 py-3 text-sm font-medium text-center bg-white/5 text-parchment/50 border border-white/10">
+        Season predictions are locked.
+      </div>
     </div>
   );
 }
